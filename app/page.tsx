@@ -45,8 +45,31 @@ export default function Home() {
           </Link>
         </div>
 
-        <div className="mt-16 text-center text-gray-500">
-          <p>支持阿里云、腾讯云、百度等主流语音服务供应商</p>
+        {/* 设置入口 */}
+        <div className="mt-8 max-w-4xl mx-auto">
+          <Link href="/settings">
+            <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-gray-400">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">⚙️ 设置</h3>
+                  <p className="text-gray-600">
+                    配置API密钥、音色参数和默认设置
+                  </p>
+                </div>
+                <div className="text-gray-400 text-2xl">→</div>
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        <div className="mt-16 text-center">
+          <p className="text-gray-500 mb-4">支持OpenAI、Qwen、豆包等大模型API，也可自定义接入任意兼容的API</p>
+          <Link
+            href="/settings"
+            className="inline-block text-blue-600 hover:text-blue-800 font-semibold"
+          >
+            ⚙️ 前往设置页面配置API
+          </Link>
         </div>
       </div>
     </div>

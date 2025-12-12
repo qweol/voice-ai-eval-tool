@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { recognizeWithAliyun } from '@/lib/providers/aliyun';
-import { recognizeWithTencent } from '@/lib/providers/tencent';
-import { recognizeWithBaidu } from '@/lib/providers/baidu';
-import { mockRecognize } from '@/lib/providers/mock';
+import { callGenericASR } from '@/lib/providers/generic/caller';
+import { ASROptions } from '@/lib/types';
+import { GenericProviderConfig } from '@/lib/providers/generic/types';
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File;
+    const language = (formData.get('language') as string) || 'zh';
+    const format = (formData.get('format') as string) || 'wav';
+    const providersStr = formData.get('providers') as string;
 
     if (!file) {
       return NextResponse.json(
@@ -22,16 +24,32 @@ export async function POST(request: NextRequest) {
 
     console.log(`收到音频文件: ${file.name}, 大小: ${(buffer.length / 1024).toFixed(2)} KB`);
 
-    // 并发调用所有供应商 API
-    const providers = [
-      { name: '阿里云', fn: () => recognizeWithAliyun(buffer) },
-      { name: '腾讯云', fn: () => recognizeWithTencent(buffer) },
-      { name: '百度', fn: () => recognizeWithBaidu(buffer) },
-    ];
+    // 解析提供者配置
+    const providers: GenericProviderConfig[] = providersStr
+      ? JSON.parse(providersStr)
+      : [];
+
+    // 构建ASR选项
+    const asrOptions: ASROptions = {
+      language,
+      format,
+    };
+
+    // 筛选支持ASR的提供者
+    const asrProviders = providers.filter(
+      (p) => p.serviceType === 'asr' || p.serviceType === 'both'
+    );
+
+    // 构建提供者调用列表
+    const providerCalls = asrProviders.map((provider) => ({
+      name: provider.name,
+      id: provider.id,
+      fn: () => callGenericASR(provider, buffer, asrOptions),
+    }));
 
     // 使用 Promise.allSettled 确保即使某个供应商失败也不影响其他
     const results = await Promise.allSettled(
-      providers.map(async (provider) => {
+      providerCalls.map(async (provider) => {
         try {
           const result = await provider.fn();
           return {

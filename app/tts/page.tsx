@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { getConfig, getAllEnabledProviders } from '@/lib/utils/config';
+import { GenericProviderConfig, VoiceDefinition } from '@/lib/providers/generic/types';
+import { templates } from '@/lib/providers/generic/templates';
 
 interface TTSResult {
   provider: string;
@@ -11,10 +14,89 @@ interface TTSResult {
   error?: string;
 }
 
+interface ProviderVoice {
+  providerId: string;
+  voice: string;
+  enabled: boolean;
+}
+
 export default function TTSPage() {
   const [text, setText] = useState('');
   const [results, setResults] = useState<TTSResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [speed, setSpeed] = useState(1.0);
+  const [volume, setVolume] = useState(1.0);
+  const [pitch, setPitch] = useState(1.0);
+  const [providerVoices, setProviderVoices] = useState<ProviderVoice[]>([]);
+  const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
+
+  useEffect(() => {
+    const config = getConfig();
+    setSpeed(config.tts.defaultSpeed);
+    setVolume(config.tts.defaultVolume);
+    setPitch(config.tts.defaultPitch);
+
+    // 获取所有启用的提供者
+    const allProviders = getAllEnabledProviders();
+    
+    // 筛选支持TTS的提供者
+    const ttsProviders = allProviders.filter((p) => {
+      return p.serviceType === 'tts' || p.serviceType === 'both';
+    });
+
+    // 初始化供应商音色配置
+    const voices = ttsProviders.map((p) => {
+      // 获取Provider配置的音色，如果没有则使用默认音色
+      let defaultVoice = p.selectedVoice || '';
+
+      // 如果Provider没有配置音色，尝试从模板获取默认音色
+      if (!defaultVoice && p.templateType) {
+        const template = templates[p.templateType];
+        if (template.models) {
+          const ttsModel = template.models.find(
+            m => m.type === 'tts' && m.id === p.selectedModels?.tts
+          );
+          if (ttsModel?.voices && ttsModel.voices.length > 0) {
+            defaultVoice = ttsModel.voices[0].id;
+          }
+        }
+      }
+
+      return {
+        providerId: p.id,
+        voice: defaultVoice || 'alloy',
+        enabled: true,
+      };
+    });
+
+    setProviderVoices(voices);
+    setEnabledProviders(ttsProviders);
+  }, []);
+
+  const updateProviderVoice = (providerId: string, voice: string) => {
+    setProviderVoices((prev) =>
+      prev.map((pv) => {
+        if (pv.providerId === providerId) {
+          return { ...pv, voice };
+        }
+        return pv;
+      })
+    );
+  };
+
+  const toggleProvider = (providerId: string) => {
+    setProviderVoices((prev) =>
+      prev.map((pv) => {
+        if (pv.providerId === providerId) {
+          return { ...pv, enabled: !pv.enabled };
+        }
+        return pv;
+      })
+    );
+    setEnabledProviders((prev) =>
+      prev.filter((p) => p.id !== providerId)
+    );
+  };
 
   const handleCompare = async () => {
     if (!text.trim()) return;
@@ -23,10 +105,25 @@ export default function TTSPage() {
     setResults([]);
 
     try {
+      // 获取启用的API
+      const config = getConfig();
+      const providers = config.providers.filter(
+        (p) => p.enabled && (p.serviceType === 'tts' || p.serviceType === 'both')
+      );
+
       const res = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          options: {
+            speed,
+            volume,
+            pitch,
+          },
+          providerVoices: providerVoices.filter((pv) => pv.enabled),
+          providers,
+        }),
       });
 
       if (!res.ok) {
@@ -83,10 +180,10 @@ export default function TTSPage() {
             className="w-full border border-gray-300 rounded-lg p-4 h-32 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 mb-6">
             <button
               onClick={handleCompare}
-              disabled={!text.trim() || loading}
+              disabled={!text.trim() || loading || enabledProviders.length === 0}
               className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold
                 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed
                 transition-colors"
@@ -97,6 +194,156 @@ export default function TTSPage() {
             <div className="text-sm text-gray-500">
               字数: {text.length}
             </div>
+
+            {enabledProviders.length === 0 && (
+              <Link
+                href="/settings"
+                className="text-sm text-blue-600 hover:text-blue-800 underline"
+              >
+                请先配置API密钥
+              </Link>
+            )}
+          </div>
+
+          {/* 参数调整 */}
+          <div className="border-t pt-4">
+            <h3 className="text-lg font-semibold mb-4">合成参数</h3>
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  语速: {speed.toFixed(1)}x
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={speed}
+                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>0.5x</span>
+                  <span>2.0x</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  音量: {volume.toFixed(1)}
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={volume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>0</span>
+                  <span>1.0</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  音调: {pitch.toFixed(1)}
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={pitch}
+                  onChange={(e) => setPitch(parseFloat(e.target.value))}
+                  className="w-full"
+                />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>0</span>
+                  <span>2.0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 供应商和音色选择 */}
+          <div className="border-t pt-4 mt-4">
+            <h3 className="text-lg font-semibold mb-4">供应商与音色选择</h3>
+            <div className="space-y-3">
+              {enabledProviders.map((provider) => {
+                const pv = providerVoices.find((v) => v.providerId === provider.id);
+
+                if (!pv) return null;
+
+                // 获取该Provider可用的音色列表
+                const getAvailableVoices = (): VoiceDefinition[] => {
+                  if (!provider.templateType) return [];
+
+                  const template = templates[provider.templateType];
+                  if (!template.models) return [];
+
+                  const ttsModel = template.models.find(
+                    m => m.type === 'tts' && m.id === provider.selectedModels?.tts
+                  );
+
+                  return ttsModel?.voices || [];
+                };
+
+                const availableVoices = getAvailableVoices();
+
+                return (
+                  <div key={provider.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                    <label className="flex items-center cursor-pointer min-w-[200px]">
+                      <input
+                        type="checkbox"
+                        checked={pv.enabled}
+                        onChange={() => toggleProvider(provider.id)}
+                        className="mr-2"
+                      />
+                      <div className="flex flex-col">
+                        <span className="font-medium">{provider.name}</span>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                            {provider.templateType || 'custom'}
+                          </span>
+                          {provider.selectedModels?.tts && (
+                            <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">
+                              {provider.selectedModels.tts}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                    {pv.enabled && (
+                      <div className="flex-1">
+                        {availableVoices.length > 0 ? (
+                          <select
+                            value={pv.voice}
+                            onChange={(e) => updateProviderVoice(provider.id, e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            {availableVoices.map(voice => (
+                              <option key={voice.id} value={voice.id}>
+                                {voice.name} ({voice.gender}) {voice.description ? `- ${voice.description}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="text-sm text-gray-500 italic">
+                            未配置模型或模型不支持音色选择
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {enabledProviders.length === 0 && (
+              <p className="text-sm text-gray-500 mt-2">
+                提示：请先在设置页面配置API密钥并启用供应商
+              </p>
+            )}
           </div>
         </div>
 

@@ -1,0 +1,426 @@
+/**
+ * 通用API调用器
+ * 支持调用任意兼容的语音API
+ */
+
+import { GenericProviderConfig, RequestVariables } from './types';
+import { ASRResult, TTSResult, ASROptions, TTSOptions } from '../../types';
+import { templates } from './templates';
+
+/**
+ * 获取要使用的模型ID
+ */
+function getModelId(config: GenericProviderConfig, serviceType: 'asr' | 'tts'): string {
+  // 1. 优先使用自定义模型
+  if (config.customModels?.[serviceType]) {
+    return config.customModels[serviceType];
+  }
+
+  // 2. 使用用户选择的模型
+  if (config.selectedModels?.[serviceType]) {
+    return config.selectedModels[serviceType];
+  }
+
+  // 3. 使用模板默认模型
+  if (config.templateType) {
+    const template = templates[config.templateType];
+    if (template.defaultModel?.[serviceType]) {
+      return template.defaultModel[serviceType];
+    }
+  }
+
+  // 4. 回退到硬编码默认值
+  if (serviceType === 'asr') {
+    return config.templateType === 'openai' ? 'whisper-1' : 'default';
+  } else {
+    return config.templateType === 'openai' ? 'gpt-4o-mini-tts' : 'default';
+  }
+}
+
+/**
+ * 获取要使用的音色ID
+ */
+function getVoiceId(config: GenericProviderConfig, optionsVoice?: string): string {
+  // 1. 优先使用传入的音色参数
+  if (optionsVoice && optionsVoice !== 'default') {
+    return optionsVoice;
+  }
+
+  // 2. 使用配置中选择的音色
+  if (config.selectedVoice) {
+    return config.selectedVoice;
+  }
+
+  // 3. 使用模板中第一个可用音色
+  if (config.templateType) {
+    const template = templates[config.templateType];
+    if (template.models) {
+      const ttsModel = template.models.find(
+        m => m.type === 'tts' && m.id === config.selectedModels?.tts
+      );
+      if (ttsModel?.voices && ttsModel.voices.length > 0) {
+        return ttsModel.voices[0].id;
+      }
+    }
+  }
+
+  // 4. 回退到默认音色
+  return 'alloy';
+}
+
+/**
+ * 转义 JSON 字符串中的特殊字符
+ */
+function escapeJsonString(str: string): string {
+  return str
+    .replace(/\\/g, '\\\\')   // 反斜杠（必须最先处理）
+    .replace(/"/g, '\\"')      // 双引号
+    .replace(/\n/g, '\\n')     // 换行符
+    .replace(/\r/g, '\\r')     // 回车符
+    .replace(/\t/g, '\\t')     // 制表符
+    .replace(/[\b]/g, '\\b')   // 退格符（使用字符类避免与\b单词边界混淆）
+    .replace(/\f/g, '\\f');    // 换页符
+}
+
+/**
+ * 替换模板中的变量
+ */
+function replaceVariables(template: string, variables: RequestVariables): string {
+  let result = template;
+
+  // 替换所有 {variable} 格式的变量
+  for (const [key, value] of Object.entries(variables)) {
+    const regex = new RegExp(`\\{${key}\\}`, 'g');
+    if (value !== undefined && value !== null) {
+      // 对字符串类型的值进行 JSON 转义
+      const stringValue = typeof value === 'string'
+        ? escapeJsonString(value)
+        : String(value);
+      result = result.replace(regex, stringValue);
+    }
+  }
+
+  // 移除未替换的变量（可选，也可以保留）
+  // result = result.replace(/\{[^}]+\}/g, '');
+
+  return result;
+}
+
+/**
+ * 根据路径获取嵌套对象的值
+ * 支持 "result.text" 或 "data[0].text" 格式
+ */
+function getValueByPath(obj: any, path: string): any {
+  if (!path) return undefined;
+  
+  const parts = path.split(/[\.\[\]]/).filter(p => p);
+  let current = obj;
+  
+  for (const part of parts) {
+    if (current === null || current === undefined) {
+      return undefined;
+    }
+    current = current[part];
+  }
+  
+  return current;
+}
+
+/**
+ * 构建认证头
+ */
+function buildAuthHeaders(config: GenericProviderConfig): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  
+  if (config.requestHeaders) {
+    Object.assign(headers, config.requestHeaders);
+  }
+  
+  switch (config.authType) {
+    case 'bearer':
+      if (config.apiKey) {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      }
+      break;
+    case 'apikey':
+      if (config.apiKey) {
+        headers['X-API-Key'] = config.apiKey;
+        // 有些服务商使用不同的头名称
+        headers['Authorization'] = `ApiKey ${config.apiKey}`;
+      }
+      break;
+    case 'custom':
+      if (config.authHeader) {
+        const [key, value] = config.authHeader.split(':').map(s => s.trim());
+        if (key && value) {
+          headers[key] = replaceVariables(value, { api_key: config.apiKey || '' });
+        }
+      }
+      break;
+  }
+  
+  return headers;
+}
+
+/**
+ * 调用通用ASR API
+ */
+export async function callGenericASR(
+  config: GenericProviderConfig,
+  audioBuffer: Buffer,
+  options?: ASROptions
+): Promise<ASRResult> {
+  const startTime = Date.now();
+  
+  try {
+    // 1. 准备变量
+    const audioBase64 = audioBuffer.toString('base64');
+    const modelId = getModelId(config, 'asr');
+
+    const variables: RequestVariables = {
+      audio: audioBase64,
+      audioBase64: audioBase64,
+      language: options?.language || 'zh',
+      format: options?.format || 'wav',
+      model: modelId,
+    };
+    
+    // 2. 构建请求体
+    let requestBody: any;
+    if (config.requestBody) {
+      const bodyTemplate = config.requestBody;
+      const bodyString = replaceVariables(bodyTemplate, variables);
+      try {
+        requestBody = JSON.parse(bodyString);
+      } catch (error) {
+        throw new Error(`请求体模板解析失败: ${error}`);
+      }
+    } else {
+      // 如果没有模板，使用默认格式
+      requestBody = {
+        audio: audioBase64,
+        language: variables.language,
+        format: variables.format,
+      };
+    }
+    
+    // 3. 构建请求头
+    const headers = buildAuthHeaders(config);
+    
+    // 4. 发送请求
+    const response = await fetch(config.apiUrl, {
+      method: config.method,
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+    
+    // 5. 解析响应
+    const responseData = await response.json();
+    
+    if (!response.ok) {
+      const errorMessage = config.errorPath
+        ? getValueByPath(responseData, config.errorPath) || response.statusText
+        : response.statusText;
+      throw new Error(`API调用失败: ${errorMessage}`);
+    }
+    
+    // 6. 提取文本
+    const text = config.responseTextPath
+      ? getValueByPath(responseData, config.responseTextPath)
+      : responseData.text || responseData.result?.text || '';
+    
+    if (!text) {
+      throw new Error('无法从响应中提取文本，请检查responseTextPath配置');
+    }
+    
+    const duration = (Date.now() - startTime) / 1000;
+    
+    return {
+      text: String(text),
+      duration,
+      confidence: responseData.confidence || responseData.result?.confidence,
+    };
+  } catch (error: any) {
+    throw new Error(`通用ASR API调用失败: ${error.message}`);
+  }
+}
+
+/**
+ * 调用通用TTS API
+ */
+export async function callGenericTTS(
+  config: GenericProviderConfig,
+  text: string,
+  options?: TTSOptions
+): Promise<TTSResult> {
+  const startTime = Date.now();
+  
+  try {
+    // 1. 准备变量
+    const modelId = getModelId(config, 'tts');
+    const voiceId = getVoiceId(config, options?.voice);
+
+    // 根据语言代码生成 language_type（用于 Qwen3-TTS）
+    const languageTypeMap: Record<string, string> = {
+      'zh': 'Chinese',
+      'en': 'English',
+      'ja': 'Japanese',
+      'ko': 'Korean',
+      'es': 'Spanish',
+      'fr': 'French',
+      'de': 'German',
+      'ru': 'Russian',
+      'ar': 'Arabic',
+      'hi': 'Hindi',
+    };
+    const language = options?.language ?? 'zh';
+    const languageType = languageTypeMap[language] || 'Chinese';
+
+    const variables: RequestVariables = {
+      text,
+      model: modelId,
+      voice: voiceId,
+      speed: options?.speed !== undefined ? options.speed : 1.0,
+      volume: options?.volume !== undefined ? options.volume : 1.0,
+      pitch: options?.pitch !== undefined ? options.pitch : 1.0,
+      language: language,
+      language_type: languageType, // Qwen3-TTS 需要的语言类型
+      format: 'mp3', // 默认格式
+    };
+    
+    // 2. 构建请求体
+    let requestBody: any;
+
+    console.log('config.requestBody 存在?', !!config.requestBody);
+    console.log('config.templateType:', config.templateType);
+
+    if (config.requestBody) {
+      let bodyTemplate = config.requestBody;
+      
+      // 自动修复：如果使用 Qwen 模板但 requestBody 是旧格式，自动更新
+      if (config.templateType === 'qwen' && bodyTemplate.includes('"input": "{text}"')) {
+        console.warn('⚠️ 检测到旧的 Qwen 模板格式，自动更新为正确格式...');
+        const template = templates.qwen;
+        bodyTemplate = template.requestBodyTemplate.tts || bodyTemplate;
+        console.log('✅ 已更新为新的模板格式');
+      }
+      
+      console.log('使用的请求体模板:', bodyTemplate);
+      const bodyString = replaceVariables(bodyTemplate, variables);
+      console.log('替换变量后:', bodyString);
+      try {
+        requestBody = JSON.parse(bodyString);
+      } catch (error: any) {
+        throw new Error(`请求体模板解析失败: ${error.message}`);
+      }
+    } else {
+      // 如果没有模板，使用默认格式
+      console.warn('⚠️ 警告: config.requestBody 为空，使用默认格式');
+      requestBody = {
+        model: modelId,
+        input: text,
+        voice: voiceId,
+        response_format: 'mp3',
+        speed: variables.speed,
+      };
+    }
+    
+    // 3. 构建请求头
+    const headers = buildAuthHeaders(config);
+
+    // 调试日志
+    console.log('=== TTS API 调用信息 ===');
+    console.log('API URL:', config.apiUrl);
+    console.log('认证类型:', config.authType);
+    console.log('模型:', modelId);
+    console.log('音色:', voiceId);
+    console.log('请求头:', JSON.stringify(headers, null, 2));
+    console.log('请求体:', JSON.stringify(requestBody, null, 2));
+
+    // 4. 发送请求
+    const response = await fetch(config.apiUrl, {
+      method: config.method,
+      headers,
+      body: JSON.stringify(requestBody),
+    });
+
+    // 5. 处理响应
+    let audioBuffer: Buffer;
+
+    // 检查Content-Type
+    const contentType = response.headers.get('content-type') || '';
+    console.log('响应 Content-Type:', contentType);
+    console.log('响应状态:', response.status, response.statusText);
+
+    if (contentType.includes('application/json')) {
+      // JSON响应，需要从响应中提取音频
+      const responseData = await response.json();
+      console.log('响应数据（前500字符）:', JSON.stringify(responseData).substring(0, 500));
+      
+      if (!response.ok) {
+        console.error('API 调用失败，完整响应:', JSON.stringify(responseData, null, 2));
+        const errorMessage = config.errorPath
+          ? getValueByPath(responseData, config.errorPath) || response.statusText
+          : response.statusText;
+        throw new Error(`API调用失败: ${errorMessage}`);
+      }
+      
+      // 提取音频数据
+      console.log('尝试从路径提取音频:', config.responseAudioPath);
+      const audioData = config.responseAudioPath
+        ? getValueByPath(responseData, config.responseAudioPath)
+        : responseData.audio || responseData.data?.audio || responseData.output?.audio?.data;
+      
+      console.log('提取的音频数据长度:', audioData ? (typeof audioData === 'string' ? audioData.length : '非字符串') : 'null');
+      
+      if (!audioData) {
+        console.error('无法提取音频数据，完整响应结构:', JSON.stringify(responseData, null, 2));
+        throw new Error('无法从响应中提取音频数据，请检查responseAudioPath配置。响应结构已输出到控制台。');
+      }
+      
+      // 根据格式解码
+      if (config.responseAudioFormat === 'base64') {
+        try {
+          audioBuffer = Buffer.from(audioData, 'base64');
+          console.log('Base64 解码成功，音频大小:', audioBuffer.length, 'bytes');
+        } catch (error) {
+          console.error('Base64 解码失败:', error);
+          throw new Error(`Base64 解码失败: ${error}`);
+        }
+      } else if (config.responseAudioFormat === 'url') {
+        // 如果是URL，需要再次请求
+        console.log('从 URL 获取音频:', audioData);
+        const audioResponse = await fetch(audioData);
+        audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+        console.log('从 URL 获取音频成功，大小:', audioBuffer.length, 'bytes');
+      } else {
+        // 假设是二进制数据
+        audioBuffer = Buffer.from(audioData);
+        console.log('直接使用二进制数据，大小:', audioBuffer.length, 'bytes');
+      }
+    } else {
+      // 直接返回音频文件
+      if (!response.ok) {
+        // 尝试读取错误信息
+        const errorText = await response.text();
+        console.error('API错误响应:', errorText);
+        throw new Error(`API调用失败: ${response.statusText} - ${errorText}`);
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffer = Buffer.from(arrayBuffer);
+      console.log('音频数据大小:', audioBuffer.length, 'bytes');
+    }
+
+    const duration = (Date.now() - startTime) / 1000;
+    
+    return {
+      audioBuffer,
+      duration,
+      format: 'mp3', // 默认格式，实际应该从响应或配置中获取
+    };
+  } catch (error: any) {
+    throw new Error(`通用TTS API调用失败: ${error.message}`);
+  }
+}

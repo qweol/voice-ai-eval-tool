@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { getConfig, getAllEnabledProviders } from '@/lib/utils/config';
+import { GenericProviderConfig } from '@/lib/providers/generic/types';
 
 interface ASRResult {
   provider: string;
@@ -9,6 +11,7 @@ interface ASRResult {
   duration: number;
   status: string;
   error?: string;
+  confidence?: number;
 }
 
 export default function ASRPage() {
@@ -16,6 +19,25 @@ export default function ASRPage() {
   const [results, setResults] = useState<ASRResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string>('');
+  const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
+  const [language, setLanguage] = useState('zh');
+  const [format, setFormat] = useState('wav');
+
+  useEffect(() => {
+    const config = getConfig();
+    setLanguage(config.asr.defaultLanguage);
+    setFormat(config.asr.defaultFormat);
+    
+    // 获取所有启用的提供者
+    const allProviders = getAllEnabledProviders();
+    
+    // 筛选支持ASR的提供者
+    const asrProviders = allProviders.filter((p) => {
+      return p.serviceType === 'asr' || p.serviceType === 'both';
+    });
+    
+    setEnabledProviders(asrProviders);
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -27,6 +49,14 @@ export default function ASRPage() {
     }
   };
 
+  const toggleProvider = (providerId: string) => {
+    setEnabledProviders((prev) => {
+      const filtered = prev.filter((p) => p.id !== providerId);
+      // 如果过滤后数量没变，说明是要移除，否则是要添加（但这里我们只处理移除）
+      return filtered.length < prev.length ? filtered : prev;
+    });
+  };
+
   const handleCompare = async () => {
     if (!file) return;
 
@@ -34,8 +64,17 @@ export default function ASRPage() {
     setResults([]);
 
     try {
+      // 获取启用的API
+      const config = getConfig();
+      const providers = config.providers.filter(
+        (p) => p.enabled && (p.serviceType === 'asr' || p.serviceType === 'both')
+      );
+
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('language', language);
+      formData.append('format', format);
+      formData.append('providers', JSON.stringify(providers));
 
       const res = await fetch('/api/asr', {
         method: 'POST',
@@ -102,15 +141,86 @@ export default function ASRPage() {
             </div>
           )}
 
+          {/* 识别参数 */}
+          <div className="border-t pt-4 mb-4">
+            <h3 className="text-lg font-semibold mb-4">识别参数</h3>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  语言
+                </label>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="zh">中文</option>
+                  <option value="en">英文</option>
+                  <option value="zh-en">中英文混合</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  音频格式
+                </label>
+                <select
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="wav">WAV</option>
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 供应商选择 */}
+          <div className="border-t pt-4 mb-4">
+            <h3 className="text-lg font-semibold mb-4">选择供应商</h3>
+            <div className="space-y-2">
+              {enabledProviders.map((provider) => {
+                return (
+                  <label key={provider.id} className="flex items-center cursor-pointer p-2 hover:bg-gray-50 rounded">
+                    <input
+                      type="checkbox"
+                      checked={true}
+                      onChange={() => toggleProvider(provider.id)}
+                      className="mr-2"
+                    />
+                    <span className="font-medium">{provider.name}</span>
+                    <span className="ml-2 text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                      {provider.templateType || 'custom'}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {enabledProviders.length === 0 && (
+              <p className="text-sm text-gray-500 mt-2">
+                提示：请先在设置页面配置API密钥并启用供应商
+              </p>
+            )}
+          </div>
+
           <button
             onClick={handleCompare}
-            disabled={!file || loading}
+            disabled={!file || loading || enabledProviders.length === 0}
             className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold
               hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
               transition-colors"
           >
             {loading ? '识别中...' : '开始识别'}
           </button>
+          {enabledProviders.length === 0 && (
+            <Link
+              href="/settings"
+              className="ml-4 text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              请先配置API密钥
+            </Link>
+          )}
         </div>
 
         {/* 加载状态 */}
@@ -140,6 +250,9 @@ export default function ASRPage() {
                       耗时(秒)
                     </th>
                     <th className="border border-gray-300 px-4 py-3 text-left font-semibold">
+                      置信度
+                    </th>
+                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold">
                       状态
                     </th>
                   </tr>
@@ -159,6 +272,13 @@ export default function ASRPage() {
                       </td>
                       <td className="border border-gray-300 px-4 py-3">
                         {result.duration.toFixed(2)}
+                      </td>
+                      <td className="border border-gray-300 px-4 py-3">
+                        {result.status === 'success' && result.confidence !== undefined ? (
+                          <span className="text-gray-600">{(result.confidence * 100).toFixed(1)}%</span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
                       <td className="border border-gray-300 px-4 py-3">
                         {result.status === 'success' ? (

@@ -18,10 +18,11 @@ export interface TTSResult {
 }
 
 export interface TTSOptions {
-  voice?: string;
-  speed?: number;
-  pitch?: number;
-  volume?: number;
+  voice?: string; // 音色类型，例如：'standard' | 'premium' | 'large-model'，具体值取决于供应商
+  speed?: number; // 语速，0-1 之间
+  pitch?: number; // 音调，0-1 之间
+  volume?: number; // 音量，0-1 之间
+  language?: string; // 语言代码，例如：'zh' | 'en' | 'ja' 等
 }
 
 // 供应商适配器接口

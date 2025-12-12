@@ -1,13 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { synthesizeWithAliyun } from '@/lib/providers/aliyun';
-import { synthesizeWithTencent } from '@/lib/providers/tencent';
-import { synthesizeWithBaidu } from '@/lib/providers/baidu';
+import { callGenericTTS } from '@/lib/providers/generic/caller';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
+import { TTSOptions } from '@/lib/types';
+import { GenericProviderConfig } from '@/lib/providers/generic/types';
+
+interface ProviderVoice {
+  providerId: string;
+  voice: string;
+  enabled: boolean;
+}
+
+interface RequestBody {
+  text: string;
+  options?: TTSOptions;
+  providerVoices?: ProviderVoice[];
+  providers?: GenericProviderConfig[]; // API配置
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { text } = await request.json();
+    const body: RequestBody = await request.json();
+    const { text, options, providerVoices, providers } = body;
 
     if (!text || !text.trim()) {
       return NextResponse.json(
@@ -26,16 +40,37 @@ export async function POST(request: NextRequest) {
       // 目录已存在，忽略错误
     }
 
-    // 并发调用所有供应商 API
-    const providers = [
-      { name: '阿里云', id: 'aliyun', fn: () => synthesizeWithAliyun(text) },
-      { name: '腾讯云', id: 'tencent', fn: () => synthesizeWithTencent(text) },
-      { name: '百度', id: 'baidu', fn: () => synthesizeWithBaidu(text) },
-    ];
+    // 获取启用的提供者
+    const enabledProviderVoices = providerVoices?.filter((pv) => pv.enabled) || [];
+    const allProviders = providers || [];
+    
+    // 筛选支持TTS的提供者
+    const ttsProviders = allProviders.filter(
+      (p) => p.serviceType === 'tts' || p.serviceType === 'both'
+    );
+
+    // 构建提供者调用列表
+    const providerCalls = ttsProviders.map((provider) => {
+      const providerVoice = enabledProviderVoices.find((pv) => pv.providerId === provider.id);
+      const voice = providerVoice?.voice || options?.voice || 'default';
+      
+      const ttsOptions: TTSOptions = {
+        voice,
+        speed: options?.speed,
+        volume: options?.volume,
+        pitch: options?.pitch,
+      };
+
+      return {
+        name: provider.name,
+        id: provider.id,
+        fn: () => callGenericTTS(provider, text, ttsOptions),
+      };
+    });
 
     // 使用 Promise.allSettled 确保即使某个供应商失败也不影响其他
     const results = await Promise.allSettled(
-      providers.map(async (provider) => {
+      providerCalls.map(async (provider) => {
         try {
           const result = await provider.fn();
 
