@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getConfig, saveConfig, resetConfig, type AppConfig } from '@/lib/utils/config';
 import GenericProviderManager from './GenericProviderManager';
+import CherryStyleProviderManager from './CherryStyleProviderManager';
+import TemplateManager from './TemplateManager';
+import ModelPlaza from './ModelPlaza';
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -73,11 +76,19 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* API管理 */}
-        <GenericProviderManager
+        {/* 模板管理 */}
+        <TemplateManager />
+
+        {/* 模型服务管理 - Cherry Studio风格 */}
+        <CherryStyleProviderManager
           providers={config.providers || []}
           onUpdate={handleProviderUpdate}
         />
+
+        {/* 模型广场 */}
+        <div className="mt-6">
+          <ModelPlaza providers={config.providers || []} />
+        </div>
 
         {/* TTS 默认设置 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">

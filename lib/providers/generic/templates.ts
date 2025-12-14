@@ -86,6 +86,7 @@ export const openaiTemplate: APITemplate = {
   defaultApiUrl: 'https://api.openai.com/v1',
   defaultMethod: 'POST',
   authType: 'bearer',
+  isBuiltin: true,
   requestBodyTemplate: {
     asr: JSON.stringify({
       model: '{model}',
@@ -180,6 +181,7 @@ export const qwenTemplate: APITemplate = {
   defaultApiUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
   defaultMethod: 'POST',
   authType: 'bearer', // DashScope 使用 Bearer Token 认证
+  isBuiltin: true,
   requestBodyTemplate: {
     asr: JSON.stringify({
       model: '{model}',
@@ -201,8 +203,8 @@ export const qwenTemplate: APITemplate = {
     }, null, 2),
   },
   responseTextPath: 'output.text',
-  responseAudioPath: 'output.audio.data', // Qwen3-TTS 音频数据在 output.audio.data 中
-  responseAudioFormat: 'base64',
+  responseAudioPath: 'output.audio.data', // Qwen3-TTS 音频数据在 output.audio.data 中（如果为空，会从 output.audio.url 下载）
+  responseAudioFormat: 'base64', // 如果data为空，会自动从url下载
   errorPath: 'message',
   variables: [
     { description: '模型名称（如：qwen-audio-turbo, qwen3-tts-flash）', required: true, default: 'qwen3-tts-flash' },
@@ -233,6 +235,7 @@ export const doubaoTemplate: APITemplate = {
   defaultApiUrl: 'https://ark.cn-beijing.volces.com/api/v3',
   defaultMethod: 'POST',
   authType: 'bearer',
+  isBuiltin: true,
   requestBodyTemplate: {
     asr: JSON.stringify({
       model: '{model}',
@@ -268,6 +271,7 @@ export const customTemplate: APITemplate = {
   defaultApiUrl: '',
   defaultMethod: 'POST',
   authType: 'bearer',
+  isBuiltin: true,
   requestBodyTemplate: {
     asr: JSON.stringify({
       // 自定义ASR请求格式
@@ -296,7 +300,8 @@ export const templates: Record<TemplateType, APITemplate> = {
 };
 
 /**
- * 根据模板类型获取模板
+ * 根据模板类型获取模板（同步版本，用于向后兼容）
+ * @deprecated 使用 template-loader.ts 中的异步 getTemplate 函数
  */
 export function getTemplate(templateType: TemplateType): APITemplate {
   return templates[templateType] || customTemplate;

@@ -1,0 +1,78 @@
+[
+  {
+    "id": "kimi",
+    "name": "Kimi (Moonshot)",
+    "description": "适用于Moonshot AI的Kimi语音识别和合成服务，兼容OpenAI API格式",
+    "defaultApiUrl": "https://api.moonshot.cn/v1",
+    "defaultMethod": "POST",
+    "authType": "bearer",
+    "isBuiltin": false,
+    "isCustom": true,
+    "requestBodyTemplate": {
+      "asr": "{\n  \"model\": \"{model}\",\n  \"file\": \"{audio}\",\n  \"language\": \"{language}\",\n  \"response_format\": \"json\"\n}",
+      "tts": "{\n  \"model\": \"{model}\",\n  \"input\": \"{text}\",\n  \"voice\": \"{voice}\",\n  \"response_format\": \"mp3\",\n  \"speed\": \"{speed}\"\n}"
+    },
+    "responseTextPath": "text",
+    "responseAudioPath": "",
+    "responseAudioFormat": "stream",
+    "errorPath": "error.message",
+    "variables": [
+      {
+        "description": "模型名称（如：whisper-1, tts-1）",
+        "required": true,
+        "default": "whisper-1"
+      },
+      {
+        "description": "语言代码（如：zh, en）",
+        "required": false,
+        "default": "zh"
+      }
+    ],
+    "models": [
+      {
+        "id": "whisper-1",
+        "name": "Whisper V1",
+        "description": "Moonshot Whisper语音识别模型，支持多语言",
+        "type": "asr",
+        "supportedLanguages": ["zh", "en", "ja", "ko"],
+        "maxFileSize": 25
+      },
+      {
+        "id": "tts-1",
+        "name": "TTS Standard",
+        "description": "Moonshot TTS标准模型",
+        "type": "tts",
+        "voices": [
+          {
+            "id": "alloy",
+            "name": "Alloy",
+            "description": "中性、平衡的音色",
+            "gender": "neutral"
+          },
+          {
+            "id": "echo",
+            "name": "Echo",
+            "description": "清晰、专业的音色",
+            "gender": "male"
+          },
+          {
+            "id": "nova",
+            "name": "Nova",
+            "description": "现代、年轻的音色",
+            "gender": "female"
+          }
+        ],
+        "supportedFormats": ["mp3", "wav"],
+        "speedRange": [0.25, 4.0]
+      }
+    ],
+    "allowCustomModel": true,
+    "defaultModel": {
+      "asr": "whisper-1",
+      "tts": "tts-1"
+    },
+    "author": "Voice AI Eval Tool",
+    "version": "1.0.0"
+  }
+]
+

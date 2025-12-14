@@ -6,7 +6,11 @@ export type AuthType = 'bearer' | 'apikey' | 'custom';
 
 export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'PATCH';
 
-export type TemplateType = 'openai' | 'qwen' | 'doubao' | 'custom';
+// 内置模板类型（向后兼容）
+export type BuiltinTemplateType = 'openai' | 'qwen' | 'doubao' | 'custom';
+
+// 模板ID可以是内置类型或自定义字符串
+export type TemplateType = BuiltinTemplateType | string;
 
 /**
  * 音色定义
@@ -103,6 +107,7 @@ export interface RequestVariables {
   text?: string; // TTS文本
   audio?: string; // ASR音频（base64编码）
   audioBase64?: string; // ASR音频（base64编码，别名）
+  audio_url?: string; // Qwen API使用的音频URL或base64（别名）
   model?: string; // 模型名称
   language?: string; // 语言
   format?: string; // 格式
@@ -110,6 +115,7 @@ export interface RequestVariables {
   volume?: number; // 音量
   pitch?: number; // 音调
   voice?: string; // 音色
+  language_type?: string; // Qwen TTS需要的语言类型（如：Chinese, English）
   [key: string]: any; // 其他自定义变量
 }
 
@@ -148,4 +154,12 @@ export interface APITemplate {
     asr?: string; // 默认ASR模型ID
     tts?: string; // 默认TTS模型ID
   };
+
+  // 新增：模板元数据
+  isBuiltin?: boolean; // 是否为内置模板
+  isCustom?: boolean; // 是否为用户自定义模板
+  version?: string; // 模板版本
+  author?: string; // 模板作者
+  createdAt?: string; // 创建时间
+  updatedAt?: string; // 更新时间
 }

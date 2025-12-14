@@ -6,6 +6,7 @@
 import { GenericProviderConfig, RequestVariables } from './types';
 import { ASRResult, TTSResult, ASROptions, TTSOptions } from '../../types';
 import { templates } from './templates';
+import { getTemplate } from './template-loader';
 
 /**
  * 获取要使用的模型ID
@@ -23,10 +24,12 @@ function getModelId(config: GenericProviderConfig, serviceType: 'asr' | 'tts'): 
 
   // 3. 使用模板默认模型
   if (config.templateType) {
-    const template = templates[config.templateType];
-    if (template.defaultModel?.[serviceType]) {
-      return template.defaultModel[serviceType];
+    // 先尝试从内置模板获取（同步，向后兼容）
+    const builtinTemplate = templates[config.templateType as keyof typeof templates];
+    if (builtinTemplate?.defaultModel?.[serviceType]) {
+      return builtinTemplate.defaultModel[serviceType];
     }
+    // 如果是自定义模板，需要异步加载（这里先返回默认值，实际应该在调用前加载）
   }
 
   // 4. 回退到硬编码默认值
@@ -53,9 +56,10 @@ function getVoiceId(config: GenericProviderConfig, optionsVoice?: string): strin
 
   // 3. 使用模板中第一个可用音色
   if (config.templateType) {
-    const template = templates[config.templateType];
-    if (template.models) {
-      const ttsModel = template.models.find(
+    // 先尝试从内置模板获取（同步，向后兼容）
+    const builtinTemplate = templates[config.templateType as keyof typeof templates];
+    if (builtinTemplate?.models) {
+      const ttsModel = builtinTemplate.models.find(
         m => m.type === 'tts' && m.id === config.selectedModels?.tts
       );
       if (ttsModel?.voices && ttsModel.voices.length > 0) {
@@ -182,6 +186,7 @@ export async function callGenericASR(
     const variables: RequestVariables = {
       audio: audioBase64,
       audioBase64: audioBase64,
+      audio_url: audioBase64, // Qwen API使用audio_url字段，但实际传入base64数据
       language: options?.language || 'zh',
       format: options?.format || 'wav',
       model: modelId,
@@ -209,8 +214,17 @@ export async function callGenericASR(
     // 3. 构建请求头
     const headers = buildAuthHeaders(config);
     
+    // 4. 构建完整的API URL（如果是OpenAI兼容的ASR，需要添加 /audio/transcriptions 端点）
+    let apiUrl = config.apiUrl;
+    if (config.templateType === 'openai' && !apiUrl.includes('/audio/')) {
+      // 如果是OpenAI风格且URL是基础URL，自动添加ASR端点
+      if (apiUrl.endsWith('/v1') || apiUrl.endsWith('/v1/')) {
+        apiUrl = apiUrl.replace(/\/v1\/?$/, '/v1/audio/transcriptions');
+      }
+    }
+    
     // 4. 发送请求
-    const response = await fetch(config.apiUrl, {
+    const response = await fetch(apiUrl, {
       method: config.method,
       headers,
       body: JSON.stringify(requestBody),
@@ -330,17 +344,26 @@ export async function callGenericTTS(
     // 3. 构建请求头
     const headers = buildAuthHeaders(config);
 
+    // 4. 构建完整的API URL（如果是OpenAI兼容的TTS，需要添加 /audio/speech 端点）
+    let apiUrl = config.apiUrl;
+    if (config.templateType === 'openai' && !apiUrl.includes('/audio/')) {
+      // 如果是OpenAI风格且URL是基础URL，自动添加TTS端点
+      if (apiUrl.endsWith('/v1') || apiUrl.endsWith('/v1/')) {
+        apiUrl = apiUrl.replace(/\/v1\/?$/, '/v1/audio/speech');
+      }
+    }
+
     // 调试日志
     console.log('=== TTS API 调用信息 ===');
-    console.log('API URL:', config.apiUrl);
+    console.log('API URL:', apiUrl);
     console.log('认证类型:', config.authType);
     console.log('模型:', modelId);
     console.log('音色:', voiceId);
     console.log('请求头:', JSON.stringify(headers, null, 2));
     console.log('请求体:', JSON.stringify(requestBody, null, 2));
 
-    // 4. 发送请求
-    const response = await fetch(config.apiUrl, {
+    // 5. 发送请求
+    const response = await fetch(apiUrl, {
       method: config.method,
       headers,
       body: JSON.stringify(requestBody),
@@ -375,30 +398,51 @@ export async function callGenericTTS(
       
       console.log('提取的音频数据长度:', audioData ? (typeof audioData === 'string' ? audioData.length : '非字符串') : 'null');
       
-      if (!audioData) {
-        console.error('无法提取音频数据，完整响应结构:', JSON.stringify(responseData, null, 2));
-        throw new Error('无法从响应中提取音频数据，请检查responseAudioPath配置。响应结构已输出到控制台。');
-      }
-      
-      // 根据格式解码
-      if (config.responseAudioFormat === 'base64') {
-        try {
-          audioBuffer = Buffer.from(audioData, 'base64');
-          console.log('Base64 解码成功，音频大小:', audioBuffer.length, 'bytes');
-        } catch (error) {
-          console.error('Base64 解码失败:', error);
-          throw new Error(`Base64 解码失败: ${error}`);
+      // Qwen API特殊处理：如果data为空，尝试从url字段获取
+      if (!audioData || (typeof audioData === 'string' && audioData.trim() === '')) {
+        console.log('⚠️ audio.data为空，尝试从audio.url获取');
+        const audioUrl = getValueByPath(responseData, 'output.audio.url') || 
+                        responseData.output?.audio?.url ||
+                        responseData.audio?.url;
+        
+        if (audioUrl) {
+          console.log('从 URL 获取音频:', audioUrl);
+          try {
+            const audioResponse = await fetch(audioUrl);
+            if (!audioResponse.ok) {
+              throw new Error(`从URL下载音频失败: ${audioResponse.statusText}`);
+            }
+            audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+            console.log('从 URL 获取音频成功，大小:', audioBuffer.length, 'bytes');
+          } catch (error: any) {
+            console.error('从URL下载音频失败:', error);
+            throw new Error(`从URL下载音频失败: ${error.message}`);
+          }
+        } else {
+          console.error('无法提取音频数据，完整响应结构:', JSON.stringify(responseData, null, 2));
+          throw new Error('无法从响应中提取音频数据，请检查responseAudioPath配置。响应结构已输出到控制台。');
         }
-      } else if (config.responseAudioFormat === 'url') {
-        // 如果是URL，需要再次请求
-        console.log('从 URL 获取音频:', audioData);
-        const audioResponse = await fetch(audioData);
-        audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
-        console.log('从 URL 获取音频成功，大小:', audioBuffer.length, 'bytes');
       } else {
-        // 假设是二进制数据
-        audioBuffer = Buffer.from(audioData);
-        console.log('直接使用二进制数据，大小:', audioBuffer.length, 'bytes');
+        // 根据格式解码
+        if (config.responseAudioFormat === 'base64') {
+          try {
+            audioBuffer = Buffer.from(audioData, 'base64');
+            console.log('Base64 解码成功，音频大小:', audioBuffer.length, 'bytes');
+          } catch (error) {
+            console.error('Base64 解码失败:', error);
+            throw new Error(`Base64 解码失败: ${error}`);
+          }
+        } else if (config.responseAudioFormat === 'url') {
+          // 如果是URL，需要再次请求
+          console.log('从 URL 获取音频:', audioData);
+          const audioResponse = await fetch(audioData);
+          audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+          console.log('从 URL 获取音频成功，大小:', audioBuffer.length, 'bytes');
+        } else {
+          // 假设是二进制数据
+          audioBuffer = Buffer.from(audioData);
+          console.log('直接使用二进制数据，大小:', audioBuffer.length, 'bytes');
+        }
       }
     } else {
       // 直接返回音频文件

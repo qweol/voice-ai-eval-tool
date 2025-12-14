@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { GenericProviderConfig, TemplateType, APITemplate, ModelDefinition } from '@/lib/providers/generic/types';
 import { templates, createConfigFromTemplate } from '@/lib/providers/generic/templates';
+import { getAllTemplates } from '@/lib/providers/generic/template-loader';
 import { addProvider, updateProvider, removeProvider, getConfig, saveConfig } from '@/lib/utils/config';
 
 interface GenericProviderManagerProps {
@@ -29,6 +30,9 @@ export default function GenericProviderManager({ providers, onUpdate }: GenericP
 
   // 当前选择的模板
   const [selectedTemplate, setSelectedTemplate] = useState<APITemplate | null>(null);
+  
+  // 所有可用模板（初始化为内置模板，避免空列表）
+  const [availableTemplates, setAvailableTemplates] = useState<APITemplate[]>(Object.values(templates));
 
   // 可用的模型列表
   const [availableModels, setAvailableModels] = useState<{
@@ -36,11 +40,29 @@ export default function GenericProviderManager({ providers, onUpdate }: GenericP
     tts: ModelDefinition[];
   }>({ asr: [], tts: [] });
 
+  // 加载所有模板
+  useEffect(() => {
+    const loadTemplates = async () => {
+      try {
+        const allTemplates = await getAllTemplates();
+        setAvailableTemplates(allTemplates);
+      } catch (error) {
+        console.error('加载模板失败:', error);
+        // 回退到内置模板
+        setAvailableTemplates(Object.values(templates));
+      }
+    };
+    loadTemplates();
+  }, []);
+
   // 当模板类型改变时，加载可用模型
   useEffect(() => {
     if (formData.templateType) {
-      const template = templates[formData.templateType];
-      setSelectedTemplate(template);
+      // 先从动态模板中查找
+      const dynamicTemplate = availableTemplates.find(t => t.id === formData.templateType);
+      // 如果找不到，尝试从内置模板查找（向后兼容）
+      const template = dynamicTemplate || templates[formData.templateType as keyof typeof templates];
+      setSelectedTemplate(template || null);
 
       if (template.models) {
         setAvailableModels({
@@ -72,7 +94,15 @@ export default function GenericProviderManager({ providers, onUpdate }: GenericP
   }, [formData.templateType]);
 
   const handleTemplateChange = (templateType: TemplateType) => {
-    const template = templates[templateType];
+    // 先从动态模板中查找
+    const dynamicTemplate = availableTemplates.find(t => t.id === templateType);
+    // 如果找不到，尝试从内置模板查找（向后兼容）
+    const template = dynamicTemplate || templates[templateType as keyof typeof templates];
+    
+    if (!template) {
+      console.warn(`模板 ${templateType} 不存在`);
+      return;
+    }
 
     // 根据服务类型选择正确的请求体模板
     let requestBody = '';
