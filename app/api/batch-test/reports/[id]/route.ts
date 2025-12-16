@@ -7,11 +7,12 @@ import { prisma } from '@/lib/db';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const report = await prisma.comparisonReport.findUnique({
-      where: { id: params.id },
+      where: { id },
       include: {
         currentBatch: {
           select: {
@@ -51,11 +52,12 @@ export async function GET(
  */
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     await prisma.comparisonReport.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({
