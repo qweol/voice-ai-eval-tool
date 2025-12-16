@@ -119,20 +119,12 @@ export default function TemplateManager() {
     <div className="bg-white rounded-lg shadow-md p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold">模板管理</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowImport(!showImport)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
-          >
-            📥 导入模板
-          </button>
-          <button
-            onClick={handleExport}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
-          >
-            📤 导出模板
-          </button>
-        </div>
+        <button
+          onClick={() => setShowImport(!showImport)}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors"
+        >
+          📥 导入模板
+        </button>
       </div>
 
       {message && (
@@ -196,30 +188,6 @@ export default function TemplateManager() {
         </div>
       )}
 
-      {/* 内置模板列表 */}
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-4">内置模板</h3>
-        <div className="space-y-2">
-          {builtinTemplates.map((template) => (
-            <div
-              key={template.id}
-              className="flex items-center justify-between p-3 border border-gray-200 rounded-lg bg-gray-50"
-            >
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{template.name}</span>
-                  <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                    内置
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 mt-1">{template.description}</p>
-                <p className="text-xs text-gray-500 mt-1">ID: {template.id}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* 用户自定义模板列表 */}
       <div>
         <h3 className="text-lg font-semibold mb-4">自定义模板</h3>
@@ -255,17 +223,6 @@ export default function TemplateManager() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* 提示信息 */}
-      <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <h4 className="font-semibold text-yellow-800 mb-2">💡 使用提示</h4>
-        <ul className="text-sm text-yellow-700 space-y-1 list-disc list-inside">
-          <li>内置模板无法删除，但可以基于它们创建自定义模板</li>
-          <li>导入模板时，如果ID已存在，将更新现有模板</li>
-          <li>导出的模板可以在其他设备或用户间分享</li>
-          <li>模板ID必须唯一，不能与内置模板冲突</li>
-        </ul>
       </div>
     </div>
   );

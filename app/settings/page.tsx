@@ -75,9 +75,6 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* 模板管理 */}
-        <TemplateManager />
-
         {/* 模型服务管理 - Cherry Studio风格 */}
         <CherryStyleProviderManager
           providers={config.providers || []}
@@ -87,6 +84,11 @@ export default function SettingsPage() {
         {/* 模型广场 */}
         <div className="mt-6">
           <ModelPlaza providers={config.providers || []} />
+        </div>
+
+        {/* 模板管理 */}
+        <div className="mt-6">
+          <TemplateManager />
         </div>
 
         {/* TTS 默认设置 */}
