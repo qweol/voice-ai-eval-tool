@@ -46,6 +46,9 @@ export async function executeBatchTest(batchId: string): Promise<void> {
     const retryCount = config.retryCount || 1;
     const speed = config.speed || 1.0;
 
+    // 转换 providers 为数组
+    const providers = Array.isArray(batch.providers) ? batch.providers : [];
+
     let completedCount = 0;
     let failedCount = 0;
     let totalDuration = 0;
@@ -65,7 +68,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
       }
 
       // 遍历所有供应商
-      for (const providerId of batch.providers) {
+      for (const providerId of providers) {
         let success = false;
         let lastError: string | null = null;
 
@@ -190,7 +193,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
       }
 
       // 更新批次进度
-      const totalTests = batch.testCases.length * batch.providers.length;
+      const totalTests = batch.testCases.length * providers.length;
       const currentCompleted = completedCount;
       const successRate = totalTests > 0 ? (completedCount / totalTests) * 100 : 0;
       const avgDuration = completedCount > 0 ? totalDuration / completedCount : 0;

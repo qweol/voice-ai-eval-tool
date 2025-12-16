@@ -43,7 +43,8 @@ export async function POST(
       );
     }
 
-    if (!batch.providers || batch.providers.length === 0) {
+    const providers = Array.isArray(batch.providers) ? batch.providers : [];
+    if (providers.length === 0) {
       return NextResponse.json(
         { success: false, error: '请选择至少一个供应商' },
         { status: 400 }
@@ -72,7 +73,7 @@ export async function POST(
       data: {
         batchId: id,
         totalCases: batch.testCases.length,
-        providers: batch.providers,
+        providers: providers,
       },
     });
   } catch (error: any) {
@@ -118,7 +119,8 @@ export async function GET(
     }
 
     // 计算实际总测试次数：用例数 × 供应商数
-    const actualTotal = batch.totalCases * (batch.providers?.length || 1);
+    const batchProviders = Array.isArray(batch.providers) ? batch.providers : [];
+    const actualTotal = batch.totalCases * (batchProviders.length || 1);
 
     const progress = {
       status: batch.status,
