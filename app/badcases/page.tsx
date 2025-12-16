@@ -161,6 +161,14 @@ export default function BadCasesPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
+        {/* 返回首页链接 */}
+        <Link
+          href="/"
+          className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-4 transition-colors"
+        >
+          ← 返回首页
+        </Link>
+
         {/* 头部 */}
         <div className="flex justify-between items-center mb-8">
           <div>

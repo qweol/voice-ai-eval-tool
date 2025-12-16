@@ -13,62 +13,98 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
+        {/* 主要功能区 - ASR 和 TTS */}
+        <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto mb-8">
           <Link href="/asr">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500">
-              <div className="text-6xl mb-4">🎤</div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">
-                ASR 语音识别
-              </h2>
-              <p className="text-gray-600 text-lg">
+            <div className="bg-white rounded-2xl shadow-lg p-10 hover:shadow-2xl transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-blue-500 hover:scale-105">
+              <div className="flex items-center mb-4">
+                <div className="text-6xl mr-4">🎤</div>
+                <div>
+                  <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full mb-2">
+                    核心功能
+                  </span>
+                  <h2 className="text-3xl font-bold text-gray-800">
+                    ASR 语音识别
+                  </h2>
+                </div>
+              </div>
+              <p className="text-gray-600 text-lg mb-6">
                 上传音频文件，对比多个供应商的识别效果
               </p>
-              <div className="mt-6 text-blue-600 font-semibold">
-                开始对比 →
+              <div className="flex items-center justify-between">
+                <div className="text-blue-600 font-semibold text-lg">
+                  开始对比 →
+                </div>
               </div>
             </div>
           </Link>
 
           <Link href="/tts">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-indigo-500">
-              <div className="text-6xl mb-4">🔊</div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">
-                TTS 语音合成
-              </h2>
-              <p className="text-gray-600 text-lg">
+            <div className="bg-white rounded-2xl shadow-lg p-10 hover:shadow-2xl transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-indigo-500 hover:scale-105">
+              <div className="flex items-center mb-4">
+                <div className="text-6xl mr-4">🔊</div>
+                <div>
+                  <span className="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full mb-2">
+                    核心功能
+                  </span>
+                  <h2 className="text-3xl font-bold text-gray-800">
+                    TTS 语音合成
+                  </h2>
+                </div>
+              </div>
+              <p className="text-gray-600 text-lg mb-6">
                 输入文本，对比多个供应商的合成效果
               </p>
-              <div className="mt-6 text-indigo-600 font-semibold">
-                开始对比 →
+              <div className="flex items-center justify-between">
+                <div className="text-indigo-600 font-semibold text-lg">
+                  开始对比 →
+                </div>
               </div>
             </div>
           </Link>
+        </div>
 
+        {/* 辅助功能区 - 批量测试和 BadCase 管理 */}
+        <div className="grid md:grid-cols-2 gap-6 max-w-6xl mx-auto">
           <Link href="/batch-test">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-purple-500">
-              <div className="text-6xl mb-4">📊</div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">
-                批量测试
-              </h2>
-              <p className="text-gray-600 text-lg">
+            <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-purple-500">
+              <div className="flex items-center mb-3">
+                <div className="text-4xl mr-3">📊</div>
+                <div>
+                  <span className="inline-block px-2 py-1 bg-purple-100 text-purple-700 text-xs font-semibold rounded-full mb-1">
+                    高级功能
+                  </span>
+                  <h3 className="text-xl font-bold text-gray-800">
+                    批量测试
+                  </h3>
+                </div>
+              </div>
+              <p className="text-gray-600 text-sm mb-3">
                 系统性测试和历史对比分析
               </p>
-              <div className="mt-6 text-purple-600 font-semibold">
+              <div className="text-purple-600 font-semibold text-sm">
                 开始测试 →
               </div>
             </div>
           </Link>
 
           <Link href="/badcases">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-orange-500">
-              <div className="text-6xl mb-4">📝</div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-4">
-                BadCase 管理
-              </h2>
-              <p className="text-gray-600 text-lg">
+            <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-xl transition-all duration-300 cursor-pointer border-2 border-transparent hover:border-orange-500">
+              <div className="flex items-center mb-3">
+                <div className="text-4xl mr-3">📝</div>
+                <div>
+                  <span className="inline-block px-2 py-1 bg-orange-100 text-orange-700 text-xs font-semibold rounded-full mb-1">
+                    管理工具
+                  </span>
+                  <h3 className="text-xl font-bold text-gray-800">
+                    BadCase 管理
+                  </h3>
+                </div>
+              </div>
+              <p className="text-gray-600 text-sm mb-3">
                 管理和追踪测试中发现的问题用例
               </p>
-              <div className="mt-6 text-orange-600 font-semibold">
+              <div className="text-orange-600 font-semibold text-sm">
                 查看管理 →
               </div>
             </div>

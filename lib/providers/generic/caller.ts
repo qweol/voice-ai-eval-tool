@@ -177,7 +177,7 @@ export async function callGenericASR(
   options?: ASROptions
 ): Promise<ASRResult> {
   const startTime = Date.now();
-  
+
   try {
     // 1. 准备变量
     const audioBase64 = audioBuffer.toString('base64');
@@ -191,66 +191,177 @@ export async function callGenericASR(
       format: options?.format || 'wav',
       model: modelId,
     };
-    
-    // 2. 构建请求体
-    let requestBody: any;
-    if (config.requestBody) {
-      const bodyTemplate = config.requestBody;
-      const bodyString = replaceVariables(bodyTemplate, variables);
-      try {
-        requestBody = JSON.parse(bodyString);
-      } catch (error) {
-        throw new Error(`请求体模板解析失败: ${error}`);
-      }
-    } else {
-      // 如果没有模板，使用默认格式
-      requestBody = {
-        audio: audioBase64,
-        language: variables.language,
-        format: variables.format,
-      };
-    }
-    
-    // 3. 构建请求头
-    const headers = buildAuthHeaders(config);
-    
-    // 4. 构建完整的API URL（如果是OpenAI兼容的ASR，需要添加 /audio/transcriptions 端点）
+
+    // 2. 构建完整的API URL
     let apiUrl = config.apiUrl;
-    if (config.templateType === 'openai' && !apiUrl.includes('/audio/')) {
-      // 如果是OpenAI风格且URL是基础URL，自动添加ASR端点
-      if (apiUrl.endsWith('/v1') || apiUrl.endsWith('/v1/')) {
-        apiUrl = apiUrl.replace(/\/v1\/?$/, '/v1/audio/transcriptions');
+
+    // OpenAI风格：确保使用正确的ASR端点
+    if (config.templateType === 'openai') {
+      // 如果URL包含 /audio/speech（TTS端点），替换为 /audio/transcriptions（ASR端点）
+      if (apiUrl.includes('/audio/speech')) {
+        apiUrl = apiUrl.replace('/audio/speech', '/audio/transcriptions');
+      }
+      // 如果URL是基础URL（/v1结尾），添加ASR端点
+      else if (!apiUrl.includes('/audio/transcriptions')) {
+        if (apiUrl.endsWith('/v1') || apiUrl.endsWith('/v1/')) {
+          apiUrl = apiUrl.replace(/\/v1\/?$/, '/v1/audio/transcriptions');
+        } else if (!apiUrl.includes('/audio/')) {
+          // 如果URL既不包含/v1也不包含/audio/，直接添加
+          apiUrl = apiUrl.replace(/\/?$/, '/audio/transcriptions');
+        }
       }
     }
-    
-    // 4. 发送请求
-    const response = await fetch(apiUrl, {
-      method: config.method,
-      headers,
-      body: JSON.stringify(requestBody),
-    });
-    
-    // 5. 解析响应
+
+    // Qwen风格：ASR使用专门的语音识别端点
+    if (config.templateType === 'qwen') {
+      // Qwen ASR 使用 /services/audio/asr/recognition 端点
+      apiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition';
+    }
+
+    // 3. OpenAI风格使用multipart/form-data，其他使用JSON
+    let response: Response;
+
+    if (config.templateType === 'openai') {
+      // OpenAI Whisper API 需要使用 multipart/form-data
+      const formData = new FormData();
+
+      // 创建 Blob 对象（将 Buffer 转换为 Uint8Array）
+      const audioBlob = new Blob([new Uint8Array(audioBuffer)], {
+        type: `audio/${options?.format || 'wav'}`
+      });
+
+      // 添加文件字段
+      formData.append('file', audioBlob, `audio.${options?.format || 'wav'}`);
+      formData.append('model', modelId);
+
+      if (options?.language) {
+        formData.append('language', options.language);
+      }
+
+      formData.append('response_format', 'json');
+
+      // 构建认证头（不包含 Content-Type，让浏览器自动设置）
+      const headers: Record<string, string> = {};
+
+      switch (config.authType) {
+        case 'bearer':
+          if (config.apiKey) {
+            headers['Authorization'] = `Bearer ${config.apiKey}`;
+          }
+          break;
+        case 'apikey':
+          if (config.apiKey) {
+            headers['X-API-Key'] = config.apiKey;
+            headers['Authorization'] = `ApiKey ${config.apiKey}`;
+          }
+          break;
+        case 'custom':
+          if (config.authHeader) {
+            const [key, value] = config.authHeader.split(':').map(s => s.trim());
+            if (key && value) {
+              headers[key] = replaceVariables(value, { api_key: config.apiKey || '' });
+            }
+          }
+          break;
+      }
+
+      // 添加自定义请求头（但不覆盖 Content-Type）
+      if (config.requestHeaders) {
+        Object.entries(config.requestHeaders).forEach(([key, value]) => {
+          if (key.toLowerCase() !== 'content-type') {
+            headers[key] = value;
+          }
+        });
+      }
+
+      console.log('=== OpenAI ASR API 调用信息 ===');
+      console.log('API URL:', apiUrl);
+      console.log('模型:', modelId);
+      console.log('语言:', options?.language);
+      console.log('格式:', options?.format);
+      console.log('音频大小:', audioBuffer.length, 'bytes');
+
+      response = await fetch(apiUrl, {
+        method: config.method,
+        headers,
+        body: formData,
+      });
+    } else {
+      // 其他API使用JSON格式
+      let requestBody: any;
+
+      // 获取ASR专用的请求体模板
+      let bodyTemplate: string | undefined;
+
+      if (config.templateType && templates[config.templateType as keyof typeof templates]) {
+        // 从模板中获取ASR专用的请求体模板
+        const template = templates[config.templateType as keyof typeof templates];
+        bodyTemplate = template.requestBodyTemplate?.asr;
+        console.log('使用模板中的ASR请求体:', config.templateType);
+      }
+
+      // 如果没有找到ASR模板，尝试使用config.requestBody（但这可能是TTS模板）
+      if (!bodyTemplate && config.requestBody) {
+        bodyTemplate = config.requestBody;
+        console.warn('⚠️ 警告: 未找到ASR专用模板，使用config.requestBody（可能是TTS模板）');
+      }
+
+      if (bodyTemplate) {
+        const bodyString = replaceVariables(bodyTemplate, variables);
+        try {
+          requestBody = JSON.parse(bodyString);
+        } catch (error) {
+          throw new Error(`请求体模板解析失败: ${error}`);
+        }
+      } else {
+        // 如果没有模板，使用默认格式
+        console.warn('⚠️ 警告: 没有找到请求体模板，使用默认格式');
+        requestBody = {
+          audio: audioBase64,
+          language: variables.language,
+          format: variables.format,
+        };
+      }
+
+      // 构建请求头
+      const headers = buildAuthHeaders(config);
+
+      console.log('=== ASR API 调用信息 ===');
+      console.log('API URL:', apiUrl);
+      console.log('模型:', modelId);
+      console.log('请求体（前500字符）:', JSON.stringify(requestBody).substring(0, 500));
+
+      response = await fetch(apiUrl, {
+        method: config.method,
+        headers,
+        body: JSON.stringify(requestBody),
+      });
+    }
+
+    // 4. 解析响应
     const responseData = await response.json();
-    
+
+    console.log('响应状态:', response.status, response.statusText);
+    console.log('响应数据（前500字符）:', JSON.stringify(responseData).substring(0, 500));
+
     if (!response.ok) {
       const errorMessage = config.errorPath
         ? getValueByPath(responseData, config.errorPath) || response.statusText
         : response.statusText;
-      throw new Error(`API调用失败: ${errorMessage}`);
+      throw new Error(`API调用失败: <${response.status}> ${errorMessage}`);
     }
-    
-    // 6. 提取文本
+
+    // 5. 提取文本
     const text = config.responseTextPath
       ? getValueByPath(responseData, config.responseTextPath)
       : responseData.text || responseData.result?.text || '';
-    
+
     if (!text) {
       throw new Error('无法从响应中提取文本，请检查responseTextPath配置');
     }
-    
+
     const duration = (Date.now() - startTime) / 1000;
-    
+
     return {
       text: String(text),
       duration,

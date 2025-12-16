@@ -158,9 +158,9 @@ const qwen3FlashVoices: VoiceDefinition[] = [
 const qwenModels: ModelDefinition[] = [
   // ASR模型
   {
-    id: 'qwen-audio-turbo',
-    name: 'Qwen Audio Turbo',
-    description: '通义千问语音识别模型，支持多语言',
+    id: 'paraformer-v2',
+    name: 'Paraformer V2',
+    description: '阿里云通义千问语音识别模型，支持多语言，高准确率',
     type: 'asr',
     supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi'],
     maxFileSize: 25 * 1024 * 1024, // 25MB
@@ -180,7 +180,10 @@ const qwenModels: ModelDefinition[] = [
 /**
  * Qwen风格模板
  * 适用于：通义千问ASR/TTS，包括最新的Qwen3-TTS
- * 使用 OpenAI 兼容模式 API
+ *
+ * 注意：
+ * - ASR使用 paraformer-v2 模型，通过 /services/audio/asr/recognition 端点
+ * - TTS使用 qwen3-tts-flash 模型，通过 /services/aigc/multimodal-generation/generation 端点
  */
 export const qwenTemplate: APITemplate = {
   id: 'qwen',
@@ -194,12 +197,9 @@ export const qwenTemplate: APITemplate = {
     asr: JSON.stringify({
       model: '{model}',
       input: {
-        audio_url: '{audio_url}',
-        format: '{format}',
+        audio: '{audioBase64}',
       },
-      parameters: {
-        language: '{language}',
-      },
+      parameters: {},
     }, null, 2),
     tts: JSON.stringify({
       model: '{model}',
@@ -215,7 +215,7 @@ export const qwenTemplate: APITemplate = {
   responseAudioFormat: 'base64', // 如果data为空，会自动从url下载
   errorPath: 'message',
   variables: [
-    { description: '模型名称（如：qwen-audio-turbo, qwen3-tts-flash）', required: true, default: 'qwen3-tts-flash' },
+    { description: '模型名称（如：paraformer-v2, qwen3-tts-flash）', required: true, default: 'qwen3-tts-flash' },
     { description: '语言代码', required: false, default: 'zh' },
   ],
 
@@ -227,7 +227,7 @@ export const qwenTemplate: APITemplate = {
 
   // 新增：默认模型
   defaultModel: {
-    asr: 'qwen-audio-turbo',
+    asr: 'paraformer-v2',
     tts: 'qwen3-tts-flash',
   },
 };

@@ -19,6 +19,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - voice-ai-network
 
   redis:
     image: redis:7-alpine
@@ -34,9 +36,40 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - voice-ai-network
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: voice-ai-eval-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://voice_ai_user:voice_ai_password@postgres:5432/voice_ai_eval?schema=public
+      - NODE_ENV=production
+    env_file:
+      - .env.production
+    volumes:
+      - ./storage:/app/storage
+      - ./public/audio:/app/public/audio
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - voice-ai-network
+    command: sh -c "npx prisma migrate deploy && node server.js"
 
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
+
+networks:
+  voice-ai-network:
+    driver: bridge
