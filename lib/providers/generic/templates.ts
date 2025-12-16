@@ -128,6 +128,10 @@ export const openaiTemplate: APITemplate = {
  * Qwen3-TTS-Flash 音色定义
  * 注意：Qwen3-TTS-Flash 支持 49 种音色，以下是已确认的部分音色
  * 完整列表请参考官方文档：https://help.aliyun.com/zh/model-studio/qwen-tts
+ * 
+ * 说明：DashScope API 中只有 qwen3-tts-flash 这一个可用的模型名称。
+ * 虽然理论上存在 Qwen3-TTS（17种音色）和 Qwen3-TTS-Flash（49种音色）两个版本，
+ * 但在实际API调用中，都使用 qwen3-tts-flash 这个模型名称。
  */
 const qwen3FlashVoices: VoiceDefinition[] = [
   { id: 'Cherry', name: '芊悦', description: '阳光积极、亲切自然的小姐姐', gender: 'female' },
@@ -145,6 +149,11 @@ const qwen3FlashVoices: VoiceDefinition[] = [
 
 /**
  * Qwen模型定义
+ * 
+ * 注意：DashScope API 中只有 qwen3-tts-flash 这一个可用的TTS模型名称。
+ * 虽然理论上存在 Qwen3-TTS（17种音色）和 Qwen3-TTS-Flash（49种音色）两个版本，
+ * 但在实际API调用中，都使用 qwen3-tts-flash 这个模型名称。
+ * 如果使用 qwen3-tts 会返回 "Model not exist." 错误。
  */
 const qwenModels: ModelDefinition[] = [
   // ASR模型
@@ -160,13 +169,12 @@ const qwenModels: ModelDefinition[] = [
   {
     id: 'qwen3-tts-flash',
     name: 'Qwen3-TTS Flash',
-    description: 'Qwen3-TTS 快速模型，低延迟（首包延迟97ms），支持流式输出，提供49种音色',
+    description: 'Qwen3-TTS 模型，低延迟（首包延迟97ms），支持流式输出，提供49种音色。注意：DashScope API中只有此模型可用',
     type: 'tts',
     voices: qwen3FlashVoices,
     supportedFormats: ['mp3', 'wav', 'pcm'],
     speedRange: [0.5, 2.0],
   },
-  // 注意：qwen3-tts 模型可能不存在或已弃用，仅保留 qwen3-tts-flash
 ];
 
 /**

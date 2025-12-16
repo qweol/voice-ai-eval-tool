@@ -1,0 +1,765 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { getConfig } from '@/lib/utils/config';
+
+interface BatchTest {
+  id: string;
+  name: string;
+  description?: string;
+  category: string;
+  tags: string[];
+  status: 'DRAFT' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PAUSED';
+  providers: string[];
+  config: any;
+  totalCases: number;
+  completedCases: number;
+  failedCases: number;
+  successRate?: number;
+  avgDuration?: number;
+  totalCost?: number;
+  createdAt: string;
+  completedAt?: string;
+  testCases: TestCase[];
+  results: TestResult[];
+}
+
+interface TestCase {
+  id: string;
+  text: string;
+  category?: string;
+  expectedVoice?: string;
+  tags: string[];
+  orderIndex: number;
+}
+
+interface TestResult {
+  id: string;
+  testCaseId: string;
+  provider: string;
+  status: 'SUCCESS' | 'FAILED' | 'TIMEOUT';
+  audioUrl?: string;
+  duration?: number;
+  cost?: number;
+  error?: string;
+  userRating?: any;
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  DRAFT: '草稿',
+  RUNNING: '运行中',
+  COMPLETED: '已完成',
+  FAILED: '失败',
+  PAUSED: '已暂停',
+};
+
+export default function BatchTestDetailPage() {
+  const params = useParams();
+  const router = useRouter();
+  const batchId = params.id as string;
+
+  const [batch, setBatch] = useState<BatchTest | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'cases' | 'results' | 'settings'>('cases');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showProviderModal, setShowProviderModal] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [progress, setProgress] = useState<any>(null);
+
+  useEffect(() => {
+    loadBatch();
+  }, [batchId]);
+
+  useEffect(() => {
+    if (batch?.status === 'RUNNING') {
+      const interval = setInterval(loadProgress, 2000);
+      return () => clearInterval(interval);
+    }
+  }, [batch?.status]);
+
+  const loadBatch = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`/api/batch-test/${batchId}`);
+      const result = await response.json();
+
+      if (result.success) {
+        setBatch(result.data);
+      }
+    } catch (error) {
+      console.error('加载批次详情失败:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadProgress = async () => {
+    try {
+      const response = await fetch(`/api/batch-test/${batchId}/execute`);
+      const result = await response.json();
+
+      if (result.success) {
+        setProgress(result.data);
+        if (result.data.status !== 'RUNNING') {
+          loadBatch();
+        }
+      }
+    } catch (error) {
+      console.error('加载进度失败:', error);
+    }
+  };
+
+  const handleExecute = async () => {
+    if (!batch) return;
+
+    if (batch.testCases.length === 0) {
+      alert('请先添加测试用例');
+      return;
+    }
+
+    if (batch.providers.length === 0) {
+      alert('请先选择供应商');
+      return;
+    }
+
+    if (!confirm(`确定要执行测试吗？\n\n将测试 ${batch.testCases.length} 个用例 × ${batch.providers.length} 个供应商 = ${batch.testCases.length * batch.providers.length} 次调用`)) {
+      return;
+    }
+
+    try {
+      setExecuting(true);
+      const response = await fetch(`/api/batch-test/${batchId}/execute`, {
+        method: 'POST',
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('测试已开始执行');
+        loadBatch();
+      } else {
+        alert('执行失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('执行失败:', error);
+      alert('执行失败');
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const handleStop = async () => {
+    if (!confirm('确定要停止测试吗？')) return;
+
+    try {
+      const response = await fetch(`/api/batch-test/${batchId}/execute`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        loadBatch();
+      }
+    } catch (error) {
+      console.error('停止失败:', error);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500">加载中...</div>
+      </div>
+    );
+  }
+
+  if (!batch) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-6xl mb-4">❌</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">批次不存在</h2>
+          <Link href="/batch-test">
+            <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              返回列表
+            </button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        {/* 头部 */}
+        <div className="mb-6">
+          <div className="flex items-center gap-4 mb-4">
+            <Link href="/batch-test">
+              <button className="text-gray-600 hover:text-gray-800">← 返回</button>
+            </Link>
+            <h1 className="text-3xl font-bold text-gray-800">{batch.name}</h1>
+            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
+              {STATUS_LABELS[batch.status]}
+            </span>
+          </div>
+
+          {batch.description && (
+            <p className="text-gray-600 mb-4">{batch.description}</p>
+          )}
+
+          {/* 统计信息 */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-sm text-gray-600">测试用例</div>
+              <div className="text-2xl font-bold text-gray-800">{batch.totalCases}</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-sm text-gray-600">供应商</div>
+              <div className="text-2xl font-bold text-gray-800">{batch.providers.length}</div>
+            </div>
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="text-sm text-gray-600">总测试次数</div>
+              <div className="text-2xl font-bold text-blue-600">
+                {batch.totalCases * batch.providers.length}
+              </div>
+            </div>
+            {batch.status === 'RUNNING' && (
+              <div className="bg-white rounded-lg shadow p-4">
+                <div className="text-sm text-gray-600">已完成</div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {batch.completedCases}/{batch.totalCases * batch.providers.length}
+                </div>
+              </div>
+            )}
+            {batch.status === 'COMPLETED' && (
+              <>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <div className="text-sm text-gray-600">成功率</div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {batch.successRate ? Number(batch.successRate).toFixed(1) : '0.0'}%
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <div className="text-sm text-gray-600">平均耗时</div>
+                  <div className="text-2xl font-bold text-gray-800">
+                    {batch.avgDuration ? Number(batch.avgDuration).toFixed(2) : '0.00'}s
+                  </div>
+                </div>
+                <div className="bg-white rounded-lg shadow p-4">
+                  <div className="text-sm text-gray-600">总成本</div>
+                  <div className="text-2xl font-bold text-gray-800">
+                    ${batch.totalCost ? Number(batch.totalCost).toFixed(4) : '0.0000'}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* 进度条 */}
+          {batch.status === 'RUNNING' && progress && (
+            <div className="bg-white rounded-lg shadow p-4 mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">执行进度</span>
+                <span className="text-sm text-gray-600">
+                  {progress.completed}/{progress.total} ({progress.percentage}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{ width: `${progress.percentage}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 操作按钮 */}
+          <div className="flex gap-4">
+            {batch.status === 'DRAFT' && (
+              <>
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  导入用例
+                </button>
+                <button
+                  onClick={() => setShowProviderModal(true)}
+                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                >
+                  选择供应商
+                </button>
+                <button
+                  onClick={handleExecute}
+                  disabled={executing}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {executing ? '启动中...' : '开始测试'}
+                </button>
+              </>
+            )}
+            {batch.status === 'RUNNING' && (
+              <button
+                onClick={handleStop}
+                className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                停止测试
+              </button>
+            )}
+            {batch.status === 'COMPLETED' && (
+              <Link href={`/batch-test/${batchId}/compare`}>
+                <button className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+                  历史对比
+                </button>
+              </Link>
+            )}
+          </div>
+        </div>
+
+        {/* 标签页 */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="border-b">
+            <div className="flex">
+              <button
+                onClick={() => setActiveTab('cases')}
+                className={`px-6 py-3 font-medium ${
+                  activeTab === 'cases'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                测试用例 ({batch.testCases.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('results')}
+                className={`px-6 py-3 font-medium ${
+                  activeTab === 'results'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                测试结果 ({batch.results.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('settings')}
+                className={`px-6 py-3 font-medium ${
+                  activeTab === 'settings'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-800'
+                }`}
+              >
+                设置
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {activeTab === 'cases' && (
+              <TestCasesTab batch={batch} onUpdate={loadBatch} />
+            )}
+            {activeTab === 'results' && (
+              <TestResultsTab batch={batch} />
+            )}
+            {activeTab === 'settings' && (
+              <SettingsTab batch={batch} onUpdate={loadBatch} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 导入模态框 */}
+      {showImportModal && (
+        <ImportModal
+          batchId={batchId}
+          onClose={() => setShowImportModal(false)}
+          onSuccess={() => {
+            setShowImportModal(false);
+            loadBatch();
+          }}
+        />
+      )}
+
+      {/* 选择供应商模态框 */}
+      {showProviderModal && (
+        <ProviderModal
+          batchId={batchId}
+          currentProviders={batch.providers}
+          onClose={() => setShowProviderModal(false)}
+          onSuccess={() => {
+            setShowProviderModal(false);
+            loadBatch();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function TestCasesTab({ batch, onUpdate }: { batch: BatchTest; onUpdate: () => void }) {
+  if (batch.testCases.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-6xl mb-4">📝</div>
+        <h3 className="text-xl font-semibold text-gray-800 mb-2">还没有测试用例</h3>
+        <p className="text-gray-600">点击"导入用例"按钮添加测试用例</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {batch.testCases.map((testCase, index) => (
+        <div key={testCase.id} className="border rounded-lg p-4 hover:bg-gray-50">
+          <div className="flex items-start gap-4">
+            <div className="text-gray-500 font-mono">{index + 1}</div>
+            <div className="flex-1">
+              <div className="text-gray-800 mb-2">{testCase.text}</div>
+              {testCase.tags.length > 0 && (
+                <div className="flex gap-2">
+                  {testCase.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TestResultsTab({ batch }: { batch: BatchTest }) {
+  if (batch.results.length === 0) {
+    return (
+      <div className="text-center py-12">
+        <div className="text-6xl mb-4">📊</div>
+        <h3 className="text-xl font-semibold text-gray-800 mb-2">还没有测试结果</h3>
+        <p className="text-gray-600">执行测试后查看结果</p>
+      </div>
+    );
+  }
+
+  const resultsByCase = batch.testCases.map((testCase) => ({
+    testCase,
+    results: batch.results.filter((r) => r.testCaseId === testCase.id),
+  }));
+
+  return (
+    <div className="space-y-6">
+      {resultsByCase.map(({ testCase, results }) => (
+        <div key={testCase.id} className="border rounded-lg p-4">
+          <div className="font-medium text-gray-800 mb-4">{testCase.text}</div>
+          <div className="grid gap-4">
+            {results.map((result) => (
+              <div key={result.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded">
+                <div className="flex-1">
+                  <div className="font-medium text-gray-700">{result.provider}</div>
+                  {result.status === 'SUCCESS' ? (
+                    <div className="text-sm text-gray-600">
+                      耗时: {result.duration ? Number(result.duration).toFixed(2) : '0.00'}s | 成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-red-600">{result.error}</div>
+                  )}
+                </div>
+                {result.audioUrl && (
+                  <audio controls className="h-10">
+                    <source src={result.audioUrl} type="audio/mpeg" />
+                  </audio>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SettingsTab({ batch, onUpdate }: { batch: BatchTest; onUpdate: () => void }) {
+  const [config, setConfig] = useState(batch.config || {});
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      const response = await fetch(`/api/batch-test/${batch.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config }),
+      });
+
+      if (response.ok) {
+        alert('保存成功');
+        onUpdate();
+      }
+    } catch (error) {
+      console.error('保存失败:', error);
+      alert('保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl">
+      <div className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            语速
+          </label>
+          <input
+            type="number"
+            min="0.5"
+            max="2"
+            step="0.1"
+            value={config.speed || 1.0}
+            onChange={(e) => setConfig({ ...config, speed: parseFloat(e.target.value) })}
+            className="w-full px-4 py-2 border rounded-lg"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            失败重试次数
+          </label>
+          <input
+            type="number"
+            min="1"
+            max="5"
+            value={config.retryCount || 1}
+            onChange={(e) => setConfig({ ...config, retryCount: parseInt(e.target.value) })}
+            className="w-full px-4 py-2 border rounded-lg"
+          />
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? '保存中...' : '保存设置'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ImportModal({
+  batchId,
+  onClose,
+  onSuccess,
+}: {
+  batchId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [format, setFormat] = useState<'json' | 'csv'>('json');
+  const [data, setData] = useState('');
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async () => {
+    try {
+      setImporting(true);
+      const response = await fetch(`/api/batch-test/${batchId}/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format, data }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`成功导入 ${result.data.imported} 个用例`);
+        onSuccess();
+      } else {
+        alert('导入失败: ' + result.error);
+      }
+    } catch (error) {
+      console.error('导入失败:', error);
+      alert('导入失败');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">导入测试用例</h2>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">格式</label>
+          <select
+            value={format}
+            onChange={(e) => setFormat(e.target.value as 'json' | 'csv')}
+            className="w-full px-4 py-2 border rounded-lg"
+          >
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+          </select>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">数据</label>
+          <textarea
+            value={data}
+            onChange={(e) => setData(e.target.value)}
+            className="w-full px-4 py-2 border rounded-lg font-mono text-sm"
+            rows={12}
+            placeholder={
+              format === 'json'
+                ? '[{"text": "你好", "tags": ["问候"]}]'
+                : 'text,category,expectedVoice,tags\n你好,客服,,问候'
+            }
+          />
+        </div>
+
+        <div className="flex gap-4">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+            disabled={importing}
+          >
+            取消
+          </button>
+          <button
+            onClick={handleImport}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            disabled={importing}
+          >
+            {importing ? '导入中...' : '导入'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProviderModal({
+  batchId,
+  currentProviders,
+  onClose,
+  onSuccess,
+}: {
+  batchId: string;
+  currentProviders: string[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [selectedProviders, setSelectedProviders] = useState<string[]>(currentProviders);
+  const [saving, setSaving] = useState(false);
+
+  const config = getConfig();
+  const availableProviders = config.providers.filter((p) => p.enabled);
+
+  const handleToggle = (providerId: string) => {
+    if (selectedProviders.includes(providerId)) {
+      setSelectedProviders(selectedProviders.filter((id) => id !== providerId));
+    } else {
+      setSelectedProviders([...selectedProviders, providerId]);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+
+      // 构建供应商配置映射
+      const providerConfigs: Record<string, any> = {};
+      selectedProviders.forEach((providerId) => {
+        const provider = availableProviders.find((p) => p.id === providerId);
+        if (provider) {
+          providerConfigs[providerId] = provider;
+        }
+      });
+
+      // 保存供应商列表和配置
+      const response = await fetch(`/api/batch-test/${batchId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providers: selectedProviders,
+          config: {
+            providerConfigs, // 保存供应商的完整配置
+          },
+        }),
+      });
+
+      if (response.ok) {
+        onSuccess();
+      }
+    } catch (error) {
+      console.error('保存失败:', error);
+      alert('保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-8 max-w-md w-full">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">选择供应商</h2>
+
+        {availableProviders.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-gray-600 mb-4">还没有配置供应商</p>
+            <Link href="/settings">
+              <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                前往设置
+              </button>
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-3 mb-6">
+              {availableProviders.map((provider) => (
+                <label
+                  key={provider.id}
+                  className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedProviders.includes(provider.id)}
+                    onChange={() => handleToggle(provider.id)}
+                    className="w-5 h-5"
+                  />
+                  <div>
+                    <div className="font-medium text-gray-800">{provider.name}</div>
+                    <div className="text-sm text-gray-600">{provider.templateType}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex gap-4">
+              <button
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+                disabled={saving}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSave}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                disabled={saving || selectedProviders.length === 0}
+              >
+                {saving ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -57,8 +57,6 @@ export async function POST(request: NextRequest) {
       const ttsOptions: TTSOptions = {
         voice,
         speed: options?.speed,
-        volume: options?.volume,
-        pitch: options?.pitch,
       };
 
       return {

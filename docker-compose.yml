@@ -1,1 +1,42 @@
+version: '3.8'
 
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: voice-ai-eval-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: voice_ai_user
+      POSTGRES_PASSWORD: voice_ai_password
+      POSTGRES_DB: voice_ai_eval
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voice_ai_user -d voice_ai_eval"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: voice-ai-eval-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

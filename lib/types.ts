@@ -18,10 +18,8 @@ export interface TTSResult {
 }
 
 export interface TTSOptions {
-  voice?: string; // 音色类型，例如：'standard' | 'premium' | 'large-model'，具体值取决于供应商
-  speed?: number; // 语速，0-1 之间
-  pitch?: number; // 音调，0-1 之间
-  volume?: number; // 音量，0-1 之间
+  voice?: string; // 音色类型，具体值取决于供应商
+  speed?: number; // 语速，0.5-2.0 之间
   language?: string; // 语言代码，例如：'zh' | 'en' | 'ja' 等
 }
 
@@ -32,4 +30,87 @@ export interface ASRAdapter {
 
 export interface TTSAdapter {
   synthesize(text: string, options?: TTSOptions): Promise<TTSResult>;
+}
+
+// ============================================
+// BadCase 管理相关类型
+// ============================================
+
+export enum BadCaseCategory {
+  PRONUNCIATION = '发音错误',
+  RHYTHM = '韵律问题',
+  EMOTION = '情感表达',
+  SPECIAL_CHAR = '特殊字符',
+  TRUNCATION = '截断问题',
+  NOISE = '噪音杂音',
+  OTHER = '其他'
+}
+
+export enum BadCaseSeverity {
+  CRITICAL = 'critical',
+  MAJOR = 'major',
+  MINOR = 'minor'
+}
+
+export enum BadCaseStatus {
+  OPEN = 'open',
+  CONFIRMED = 'confirmed',
+  FIXED = 'fixed',
+  WONTFIX = 'wontfix'
+}
+
+export interface BadCase {
+  id: string;
+  text: string;
+  category: keyof typeof BadCaseCategory;
+  severity: BadCaseSeverity;
+  status: BadCaseStatus;
+
+  description?: string;
+  expectedBehavior?: string;
+  actualBehavior?: string;
+
+  // 音频关联 (providerId -> audioUrl)
+  audioUrls: Record<string, string>;
+  referenceAudioUrl?: string;
+
+  priority: number; // 1-5
+  tags: string[];
+
+  createdBy: string;
+  createdAt: string; // ISO 8601 格式
+  updatedAt: string;
+
+  // 简化版验证历史（只保存最后一次）
+  lastVerification?: VerificationRecord;
+}
+
+export interface VerificationRecord {
+  id: string;
+  providerId: string;
+  status: 'pass' | 'fail';
+  audioUrl?: string;
+  notes?: string;
+  verifiedBy: string;
+  verifiedAt: string;
+}
+
+// BadCase 列表查询参数
+export interface BadCaseListQuery {
+  status?: BadCaseStatus;
+  category?: keyof typeof BadCaseCategory;
+  severity?: BadCaseSeverity;
+  tags?: string[];
+  search?: string;
+  sortBy?: 'createdAt' | 'updatedAt' | 'priority';
+  sortOrder?: 'asc' | 'desc';
+}
+
+// BadCase 统计数据
+export interface BadCaseStats {
+  total: number;
+  byStatus: Record<BadCaseStatus, number>;
+  byCategory: Record<string, number>;
+  bySeverity: Record<BadCaseSeverity, number>;
+  byProvider: Record<string, number>;
 }

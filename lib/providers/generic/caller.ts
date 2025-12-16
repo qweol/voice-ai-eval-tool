@@ -297,8 +297,6 @@ export async function callGenericTTS(
       model: modelId,
       voice: voiceId,
       speed: options?.speed !== undefined ? options.speed : 1.0,
-      volume: options?.volume !== undefined ? options.volume : 1.0,
-      pitch: options?.pitch !== undefined ? options.pitch : 1.0,
       language: language,
       language_type: languageType, // Qwen3-TTS 需要的语言类型
       format: 'mp3', // 默认格式

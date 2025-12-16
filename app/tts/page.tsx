@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getConfig, getAllEnabledProviders } from '@/lib/utils/config';
+import { useRouter } from 'next/navigation';
+import { getConfig, getAllEnabledProviders, createBadCase } from '@/lib/utils/config';
 import { GenericProviderConfig, VoiceDefinition } from '@/lib/providers/generic/types';
 import { templates } from '@/lib/providers/generic/templates';
+import { BadCaseStatus, BadCaseSeverity } from '@/lib/types';
 
 interface TTSResult {
   provider: string;
@@ -21,20 +23,17 @@ interface ProviderVoice {
 }
 
 export default function TTSPage() {
+  const router = useRouter();
   const [text, setText] = useState('');
   const [results, setResults] = useState<TTSResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [speed, setSpeed] = useState(1.0);
-  const [volume, setVolume] = useState(1.0);
-  const [pitch, setPitch] = useState(1.0);
   const [providerVoices, setProviderVoices] = useState<ProviderVoice[]>([]);
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
 
   useEffect(() => {
     const config = getConfig();
     setSpeed(config.tts.defaultSpeed);
-    setVolume(config.tts.defaultVolume);
-    setPitch(config.tts.defaultPitch);
 
     // 获取所有启用的提供者
     const allProviders = getAllEnabledProviders();
@@ -118,8 +117,6 @@ export default function TTSPage() {
           text,
           options: {
             speed,
-            volume,
-            pitch,
           },
           providerVoices: providerVoices.filter((pv) => pv.enabled),
           providers,
@@ -151,6 +148,65 @@ export default function TTSPage() {
         }, index * 3000); // 每个音频间隔3秒播放
       }
     });
+  };
+
+  // 标记为 BadCase
+  const handleMarkAsBadCase = (result: TTSResult) => {
+    // 收集所有成功的音频 URL
+    const audioUrls: Record<string, string> = {};
+    results.forEach(r => {
+      if (r.status === 'success') {
+        audioUrls[r.provider] = r.audioUrl;
+      }
+    });
+
+    // 创建 BadCase
+    const badCase = createBadCase({
+      text,
+      category: 'OTHER', // 默认分类，用户可以后续修改
+      severity: BadCaseSeverity.MAJOR,
+      status: BadCaseStatus.OPEN,
+      description: `从 TTS 测试标记，供应商: ${result.provider}`,
+      audioUrls,
+      priority: 3,
+      tags: ['TTS测试', result.provider],
+    });
+
+    if (confirm(`已标记为 BadCase！\n\nID: ${badCase.id}\n\n是否立即查看详情？`)) {
+      router.push(`/badcases/${badCase.id}`);
+    }
+  };
+
+  // 批量标记为 BadCase
+  const handleMarkAllAsBadCase = () => {
+    const successResults = results.filter(r => r.status === 'success');
+
+    if (successResults.length === 0) {
+      alert('没有成功的合成结果可以标记');
+      return;
+    }
+
+    // 收集所有成功的音频 URL
+    const audioUrls: Record<string, string> = {};
+    successResults.forEach(r => {
+      audioUrls[r.provider] = r.audioUrl;
+    });
+
+    // 创建 BadCase
+    const badCase = createBadCase({
+      text,
+      category: 'OTHER',
+      severity: BadCaseSeverity.MAJOR,
+      status: BadCaseStatus.OPEN,
+      description: `从 TTS 测试批量标记，包含 ${successResults.length} 个供应商`,
+      audioUrls,
+      priority: 3,
+      tags: ['TTS测试', '批量标记'],
+    });
+
+    if (confirm(`已创建 BadCase！\n\nID: ${badCase.id}\n包含 ${successResults.length} 个供应商的音频\n\n是否立即查看详情？`)) {
+      router.push(`/badcases/${badCase.id}`);
+    }
   };
 
   return (
@@ -208,7 +264,7 @@ export default function TTSPage() {
           {/* 参数调整 */}
           <div className="border-t pt-4">
             <h3 className="text-lg font-semibold mb-4">合成参数</h3>
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="max-w-md">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   语速: {speed.toFixed(1)}x
@@ -225,42 +281,6 @@ export default function TTSPage() {
                 <div className="flex justify-between text-xs text-gray-500 mt-1">
                   <span>0.5x</span>
                   <span>2.0x</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  音量: {volume.toFixed(1)}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={volume}
-                  onChange={(e) => setVolume(parseFloat(e.target.value))}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>0</span>
-                  <span>1.0</span>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  音调: {pitch.toFixed(1)}
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value={pitch}
-                  onChange={(e) => setPitch(parseFloat(e.target.value))}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-xs text-gray-500 mt-1">
-                  <span>0</span>
-                  <span>2.0</span>
                 </div>
               </div>
             </div>
@@ -360,13 +380,22 @@ export default function TTSPage() {
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold">合成结果对比</h2>
-              <button
-                onClick={playAll}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold
-                  hover:bg-green-700 transition-colors"
-              >
-                🔊 一键播放全部
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={playAll}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold
+                    hover:bg-green-700 transition-colors"
+                >
+                  🔊 一键播放全部
+                </button>
+                <button
+                  onClick={handleMarkAllAsBadCase}
+                  className="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-semibold
+                    hover:bg-orange-700 transition-colors"
+                >
+                  🏷️ 批量标记为 BadCase
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -392,14 +421,24 @@ export default function TTSPage() {
                   </div>
 
                   {result.status === 'success' ? (
-                    <div className="bg-gray-50 rounded p-3">
-                      <audio
-                        id={`audio-${i}`}
-                        controls
-                        src={result.audioUrl}
-                        className="w-full"
-                      />
-                    </div>
+                    <>
+                      <div className="bg-gray-50 rounded p-3 mb-3">
+                        <audio
+                          id={`audio-${i}`}
+                          controls
+                          src={result.audioUrl}
+                          className="w-full"
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => handleMarkAsBadCase(result)}
+                          className="text-sm px-3 py-1.5 bg-orange-100 text-orange-700 rounded hover:bg-orange-200 transition-colors border border-orange-300"
+                        >
+                          🏷️ 标记为 BadCase
+                        </button>
+                      </div>
+                    </>
                   ) : (
                     <div className="bg-red-50 rounded p-3">
                       <p className="text-red-600 text-sm">

@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getConfig, saveConfig, resetConfig, type AppConfig } from '@/lib/utils/config';
-import GenericProviderManager from './GenericProviderManager';
 import CherryStyleProviderManager from './CherryStyleProviderManager';
 import TemplateManager from './TemplateManager';
 import ModelPlaza from './ModelPlaza';
@@ -93,23 +92,7 @@ export default function SettingsPage() {
         {/* TTS 默认设置 */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-2xl font-semibold mb-4">TTS 默认设置</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                默认音色
-              </label>
-              <select
-                value={config.tts.defaultVoice}
-                onChange={(e) =>
-                  setConfig({ ...config, tts: { ...config.tts, defaultVoice: e.target.value } })
-                }
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="standard">标准音色</option>
-                <option value="premium">精品音色</option>
-                <option value="large-model">大模型音色</option>
-              </select>
-            </div>
+          <div className="max-w-md">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 默认语速: {config.tts.defaultSpeed.toFixed(1)}x
@@ -128,44 +111,10 @@ export default function SettingsPage() {
                 }
                 className="w-full"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                默认音量: {config.tts.defaultVolume.toFixed(1)}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={config.tts.defaultVolume}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    tts: { ...config.tts, defaultVolume: parseFloat(e.target.value) },
-                  })
-                }
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                默认音调: {config.tts.defaultPitch.toFixed(1)}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.1"
-                value={config.tts.defaultPitch}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    tts: { ...config.tts, defaultPitch: parseFloat(e.target.value) },
-                  })
-                }
-                className="w-full"
-              />
+              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                <span>0.5x</span>
+                <span>2.0x</span>
+              </div>
             </div>
           </div>
         </div>

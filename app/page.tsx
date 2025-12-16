@@ -13,7 +13,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 max-w-7xl mx-auto">
           <Link href="/asr">
             <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-blue-500">
               <div className="text-6xl mb-4">🎤</div>
@@ -43,10 +43,40 @@ export default function Home() {
               </div>
             </div>
           </Link>
+
+          <Link href="/batch-test">
+            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-purple-500">
+              <div className="text-6xl mb-4">📊</div>
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">
+                批量测试
+              </h2>
+              <p className="text-gray-600 text-lg">
+                系统性测试和历史对比分析
+              </p>
+              <div className="mt-6 text-purple-600 font-semibold">
+                开始测试 →
+              </div>
+            </div>
+          </Link>
+
+          <Link href="/badcases">
+            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-orange-500">
+              <div className="text-6xl mb-4">📝</div>
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">
+                BadCase 管理
+              </h2>
+              <p className="text-gray-600 text-lg">
+                管理和追踪测试中发现的问题用例
+              </p>
+              <div className="mt-6 text-orange-600 font-semibold">
+                查看管理 →
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* 设置入口 */}
-        <div className="mt-8 max-w-4xl mx-auto">
+        <div className="mt-8 max-w-7xl mx-auto">
           <Link href="/settings">
             <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition-shadow cursor-pointer border-2 border-transparent hover:border-gray-400">
               <div className="flex items-center justify-between">
