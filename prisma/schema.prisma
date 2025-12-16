@@ -15,11 +15,11 @@ model BatchTest {
   name        String   @db.VarChar(255)
   description String?  @db.Text
   category    String   @db.VarChar(50)
-  tags        String[]
+  tags        Json
   status      BatchTestStatus @default(DRAFT)
 
   config      Json     @default("{}")
-  providers   String[]
+  providers   Json
 
   totalCases     Int      @default(0) @map("total_cases")
   completedCases Int      @default(0) @map("completed_cases")
@@ -62,7 +62,7 @@ model TestCase {
   text          String   @db.Text
   category      String?  @db.VarChar(50)
   expectedVoice String?  @db.VarChar(100) @map("expected_voice")
-  tags          String[]
+  tags          Json
   metadata      Json     @default("{}")
 
   orderIndex    Int      @default(0) @map("order_index")
@@ -137,7 +137,7 @@ model ComparisonReport {
   name             String   @db.VarChar(255)
   currentBatchId   String   @map("current_batch_id")
   currentBatch     BatchTest @relation("CurrentBatch", fields: [currentBatchId], references: [id])
-  baselineBatchIds String[] @map("baseline_batch_ids")
+  baselineBatchIds Json     @map("baseline_batch_ids")
 
   summary          Json
   details          Json
