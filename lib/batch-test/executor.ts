@@ -69,6 +69,8 @@ export async function executeBatchTest(batchId: string): Promise<void> {
 
       // 遍历所有供应商
       for (const providerId of providers) {
+        // 确保 providerId 是字符串
+        const providerIdStr = String(providerId);
         let success = false;
         let lastError: string | null = null;
 
@@ -78,16 +80,16 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             // 从批次配置中获取供应商配置
             // 注意：批量测试在服务器端执行，无法访问 localStorage
             // 所以供应商配置需要在批次配置中保存
-            console.log(`🔍 查找供应商: ${providerId}`);
+            console.log(`🔍 查找供应商: ${providerIdStr}`);
 
             const batchConfig = batch.config as any;
             const providerConfigs = batchConfig.providerConfigs || {};
-            const providerConfig = providerConfigs[providerId];
+            const providerConfig = providerConfigs[providerIdStr];
 
             if (!providerConfig) {
-              console.error(`❌ 供应商 ${providerId} 配置不存在`);
+              console.error(`❌ 供应商 ${providerIdStr} 配置不存在`);
               console.error(`📋 批次配置中的供应商:`, Object.keys(providerConfigs));
-              throw new Error(`供应商 ${providerId} 配置不存在。请确保在执行测试前已保存供应商配置到批次中。`);
+              throw new Error(`供应商 ${providerIdStr} 配置不存在。请确保在执行测试前已保存供应商配置到批次中。`);
             }
 
             console.log(`✅ 找到供应商: ${providerConfig.name}`);
@@ -101,7 +103,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             const totalTime = Date.now() - startTime;
 
             // 保存音频文件
-            const audioFileName = `${batchId}_${testCase.id}_${providerId}_${Date.now()}.mp3`;
+            const audioFileName = `${batchId}_${testCase.id}_${providerIdStr}_${Date.now()}.mp3`;
             const audioPath = path.join(process.cwd(), 'storage', 'audio', audioFileName);
             await fs.mkdir(path.dirname(audioPath), { recursive: true });
             await fs.writeFile(audioPath, result.audioBuffer);
@@ -109,7 +111,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             const audioUrl = `/api/storage/audio/${audioFileName}`;
 
             // 计算成本（简化版，实际应该根据供应商定价）
-            const cost = calculateCost(testCase.text.length, providerId);
+            const cost = calculateCost(testCase.text.length, providerIdStr);
 
             // 保存测试结果
             await prisma.batchTestResult.upsert({
@@ -117,13 +119,13 @@ export async function executeBatchTest(batchId: string): Promise<void> {
                 batchId_testCaseId_provider: {
                   batchId,
                   testCaseId: testCase.id,
-                  provider: providerId,
+                  provider: providerIdStr,
                 },
               },
               create: {
                 batchId,
                 testCaseId: testCase.id,
-                provider: providerId,
+                provider: providerIdStr,
                 status: TestResultStatus.SUCCESS,
                 audioUrl,
                 duration: result.duration,
@@ -156,7 +158,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             console.error(
               `测试失败 (尝试 ${attempt + 1}/${retryCount}):`,
               testCase.id,
-              providerId,
+              providerIdStr,
               error.message
             );
 
@@ -167,13 +169,13 @@ export async function executeBatchTest(batchId: string): Promise<void> {
                   batchId_testCaseId_provider: {
                     batchId,
                     testCaseId: testCase.id,
-                    provider: providerId,
+                    provider: providerIdStr,
                   },
                 },
                 create: {
                   batchId,
                   testCaseId: testCase.id,
-                  provider: providerId,
+                  provider: providerIdStr,
                   status: TestResultStatus.FAILED,
                   error: lastError,
                 },
