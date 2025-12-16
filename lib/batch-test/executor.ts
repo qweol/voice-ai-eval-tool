@@ -104,11 +104,15 @@ export async function executeBatchTest(batchId: string): Promise<void> {
 
             // 保存音频文件
             const audioFileName = `${batchId}_${testCase.id}_${providerIdStr}_${Date.now()}.mp3`;
-            const audioPath = path.join(process.cwd(), 'storage', 'audio', audioFileName);
-            await fs.mkdir(path.dirname(audioPath), { recursive: true });
+            const audioDir =
+              process.env.AUDIO_STORAGE_DIR ||
+              path.join(process.cwd(), 'public', 'audio');
+            const audioPath = path.join(audioDir, audioFileName);
+            await fs.mkdir(audioDir, { recursive: true });
             await fs.writeFile(audioPath, result.audioBuffer);
 
-            const audioUrl = `/api/storage/audio/${audioFileName}`;
+            // 直接使用静态资源路径，避免读取不到文件
+            const audioUrl = `/audio/${audioFileName}`;
 
             // 计算成本（简化版，实际应该根据供应商定价）
             const cost = calculateCost(testCase.text.length, providerIdStr);

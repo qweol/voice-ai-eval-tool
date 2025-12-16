@@ -32,8 +32,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`收到 TTS 请求，文本长度: ${text.length}`);
 
-    // 确保音频目录存在
-    const audioDir = path.join(process.cwd(), 'public', 'audio');
+    // 确保音频目录存在（可通过环境变量配置）
+    const audioDir =
+      process.env.AUDIO_STORAGE_DIR ||
+      path.join(process.cwd(), 'public', 'audio');
     try {
       await mkdir(audioDir, { recursive: true });
     } catch (error) {
