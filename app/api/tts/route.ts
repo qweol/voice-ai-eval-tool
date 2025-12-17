@@ -47,17 +47,31 @@ export async function POST(request: NextRequest) {
     const enabledProviderVoices = providerVoices?.filter((pv) => pv.enabled) || [];
     const allProviders = providers || [];
 
+    console.log('=== TTS API 开始处理 ===');
+
     // 获取系统预置供应商（包含完整 API Key）
     const systemProviders = getSystemProviders();
+    console.log('系统预置供应商数量:', systemProviders.length);
+    console.log('QWEN_API_KEY 环境变量:', process.env.QWEN_API_KEY ? '已设置' : '未设置');
+    console.log('CARTESIA_API_KEY 环境变量:', process.env.CARTESIA_API_KEY ? '已设置' : '未设置');
 
     // 合并供应商配置：如果是系统预置供应商，使用服务器端的完整配置
     const mergedProviders = allProviders.map(provider => {
       if (provider.isSystem) {
+        console.log('处理系统预置供应商:', provider.name, 'ID:', provider.id);
         // 从系统预置供应商中查找完整配置
         const systemProvider = systemProviders.find(sp => sp.id === provider.id);
         if (systemProvider) {
-          console.log(`使用系统预置供应商: ${systemProvider.name}`);
-          return systemProvider;
+          console.log('找到系统配置，API Key 长度:', systemProvider.apiKey?.length);
+          // 合并用户的覆盖配置（如模型、音色选择），但保留系统的 API Key
+          const { apiKey: _, ...userOverrides } = provider;
+          return {
+            ...systemProvider,
+            ...userOverrides,
+            apiKey: systemProvider.apiKey, // 确保使用系统的 API Key
+          };
+        } else {
+          console.error('未找到系统预置供应商:', provider.id);
         }
       }
       return provider;

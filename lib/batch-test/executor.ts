@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/db';
 import { callGenericTTS } from '@/lib/providers/generic/caller';
+import { getSystemProviders } from '@/lib/providers/system-providers';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -84,12 +85,31 @@ export async function executeBatchTest(batchId: string): Promise<void> {
 
             const batchConfig = batch.config as any;
             const providerConfigs = batchConfig.providerConfigs || {};
-            const providerConfig = providerConfigs[providerIdStr];
+            let providerConfig = providerConfigs[providerIdStr];
 
             if (!providerConfig) {
               console.error(`❌ 供应商 ${providerIdStr} 配置不存在`);
               console.error(`📋 批次配置中的供应商:`, Object.keys(providerConfigs));
               throw new Error(`供应商 ${providerIdStr} 配置不存在。请确保在执行测试前已保存供应商配置到批次中。`);
+            }
+
+            // 如果是系统预置供应商，从服务器端获取完整配置（包含真实的 API Key）
+            if (providerConfig.isSystem) {
+              const systemProviders = getSystemProviders();
+              const systemProvider = systemProviders.find(sp => sp.id === providerIdStr);
+
+              if (systemProvider) {
+                console.log(`✅ 使用系统预置供应商: ${systemProvider.name}`);
+                // 合并用户的覆盖配置（如模型、音色选择），但保留系统的 API Key
+                const { apiKey: _, ...userOverrides } = providerConfig;
+                providerConfig = {
+                  ...systemProvider,
+                  ...userOverrides,
+                  apiKey: systemProvider.apiKey, // 确保使用系统的 API Key
+                };
+              } else {
+                console.warn(`⚠️ 系统预置供应商 ${providerIdStr} 未找到，使用批次配置`);
+              }
             }
 
             console.log(`✅ 找到供应商: ${providerConfig.name}`);

@@ -181,12 +181,15 @@ export async function getAllProvidersWithSystem(): Promise<GenericProviderConfig
     const overrides = appConfig.systemProviderOverrides || {};
 
     // 3. 应用覆盖配置到系统预置供应商
+    // 注意：不覆盖 apiKey，保持系统预置供应商的 API Key
     systemProviders = systemProviders.map((provider: GenericProviderConfig) => {
       const override = overrides[provider.id];
       if (override) {
+        // 从覆盖配置中移除 apiKey，避免覆盖系统的 API Key
+        const { apiKey, ...safeOverride } = override;
         return {
           ...provider,
-          ...override,
+          ...safeOverride,
         };
       }
       return provider;

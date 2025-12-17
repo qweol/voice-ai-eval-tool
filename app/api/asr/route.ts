@@ -40,7 +40,13 @@ export async function POST(request: NextRequest) {
         const systemProvider = systemProviders.find(sp => sp.id === provider.id);
         if (systemProvider) {
           console.log(`使用系统预置供应商: ${systemProvider.name}`);
-          return systemProvider;
+          // 合并用户的覆盖配置（如模型选择），但保留系统的 API Key
+          const { apiKey: _, ...userOverrides } = provider;
+          return {
+            ...systemProvider,
+            ...userOverrides,
+            apiKey: systemProvider.apiKey, // 确保使用系统的 API Key
+          };
         }
       }
       return provider;

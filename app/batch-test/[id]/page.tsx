@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { getConfig } from '@/lib/utils/config';
+import { getConfig, createBadCase } from '@/lib/utils/config';
+import { BadCaseStatus, BadCaseSeverity, BadCaseCategory } from '@/lib/types';
 
 interface BatchTest {
   id: string;
@@ -437,6 +438,9 @@ function TestCasesTab({ batch, onUpdate }: { batch: BatchTest; onUpdate: () => v
 }
 
 function TestResultsTab({ batch }: { batch: BatchTest }) {
+  const [showBadCaseModal, setShowBadCaseModal] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<{ testCase: TestCase; result: TestResult } | null>(null);
+
   if (batch.results.length === 0) {
     return (
       <div className="text-center py-12">
@@ -452,35 +456,65 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
     results: batch.results.filter((r) => r.testCaseId === testCase.id),
   }));
 
+  const handleMarkAsBadCase = (testCase: TestCase, result: TestResult) => {
+    setSelectedResult({ testCase, result });
+    setShowBadCaseModal(true);
+  };
+
   return (
-    <div className="space-y-6">
-      {resultsByCase.map(({ testCase, results }) => (
-        <div key={testCase.id} className="border rounded-lg p-4">
-          <div className="font-medium text-gray-800 mb-4">{testCase.text}</div>
-          <div className="grid gap-4">
-            {results.map((result) => (
-              <div key={result.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded">
-                <div className="flex-1">
-                  <div className="font-medium text-gray-700">{result.provider}</div>
-                  {result.status === 'SUCCESS' ? (
-                    <div className="text-sm text-gray-600">
-                      耗时: {result.duration ? Number(result.duration).toFixed(2) : '0.00'}s | 成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-red-600">{result.error}</div>
+    <>
+      <div className="space-y-6">
+        {resultsByCase.map(({ testCase, results }) => (
+          <div key={testCase.id} className="border rounded-lg p-4">
+            <div className="font-medium text-gray-800 mb-4">{testCase.text}</div>
+            <div className="grid gap-4">
+              {results.map((result) => (
+                <div key={result.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded">
+                  <div className="flex-1">
+                    <div className="font-medium text-gray-700">{result.provider}</div>
+                    {result.status === 'SUCCESS' ? (
+                      <div className="text-sm text-gray-600">
+                        耗时: {result.duration ? Number(result.duration).toFixed(2) : '0.00'}s | 成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-red-600">{result.error}</div>
+                    )}
+                  </div>
+                  {result.audioUrl && (
+                    <audio controls className="h-10">
+                      <source src={result.audioUrl} type="audio/mpeg" />
+                    </audio>
                   )}
+                  <button
+                    onClick={() => handleMarkAsBadCase(testCase, result)}
+                    className="px-3 py-1.5 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 whitespace-nowrap"
+                    title="标注为 BadCase"
+                  >
+                    标注 BadCase
+                  </button>
                 </div>
-                {result.audioUrl && (
-                  <audio controls className="h-10">
-                    <source src={result.audioUrl} type="audio/mpeg" />
-                  </audio>
-                )}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+
+      {showBadCaseModal && selectedResult && (
+        <BadCaseModal
+          testCase={selectedResult.testCase}
+          result={selectedResult.result}
+          onClose={() => {
+            setShowBadCaseModal(false);
+            setSelectedResult(null);
+          }}
+          onSuccess={() => {
+            setShowBadCaseModal(false);
+            setSelectedResult(null);
+            alert('BadCase 标注成功！');
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -656,10 +690,28 @@ function ProviderModal({
   onSuccess: () => void;
 }) {
   const [selectedProviders, setSelectedProviders] = useState<string[]>(currentProviders);
+  const [availableProviders, setAvailableProviders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const config = getConfig();
-  const availableProviders = config.providers.filter((p) => p.enabled);
+  // 加载所有供应商（包括系统预置）
+  useEffect(() => {
+    const loadProviders = async () => {
+      try {
+        const { getAllProvidersWithSystem } = await import('@/lib/utils/config');
+        const allProviders = await getAllProvidersWithSystem();
+        setAvailableProviders(allProviders.filter((p) => p.enabled));
+      } catch (error) {
+        console.error('加载供应商失败:', error);
+        // 降级到只使用用户自定义供应商
+        const config = getConfig();
+        setAvailableProviders(config.providers.filter((p) => p.enabled));
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadProviders();
+  }, []);
 
   const handleToggle = (providerId: string) => {
     if (selectedProviders.includes(providerId)) {
@@ -710,7 +762,11 @@ function ProviderModal({
       <div className="bg-white rounded-lg p-8 max-w-md w-full">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">选择供应商</h2>
 
-        {availableProviders.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-8">
+            <div className="text-gray-500">加载供应商列表...</div>
+          </div>
+        ) : availableProviders.length === 0 ? (
           <div className="text-center py-8">
             <p className="text-gray-600 mb-4">还没有配置供应商</p>
             <Link href="/settings">
@@ -759,6 +815,241 @@ function ProviderModal({
             </div>
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function BadCaseModal({
+  testCase,
+  result,
+  onClose,
+  onSuccess,
+}: {
+  testCase: TestCase;
+  result: TestResult;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [category, setCategory] = useState<keyof typeof BadCaseCategory>('OTHER');
+  const [severity, setSeverity] = useState<BadCaseSeverity>(BadCaseSeverity.MINOR);
+  const [description, setDescription] = useState('');
+  const [expectedBehavior, setExpectedBehavior] = useState('');
+  const [actualBehavior, setActualBehavior] = useState('');
+  const [tags, setTags] = useState<string[]>(testCase.tags || []);
+  const [tagInput, setTagInput] = useState('');
+  const [priority, setPriority] = useState(3);
+  const [saving, setSaving] = useState(false);
+
+  const handleAddTag = () => {
+    if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+      setTags([...tags, tagInput.trim()]);
+      setTagInput('');
+    }
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setTags(tags.filter((t) => t !== tag));
+  };
+
+  const handleSubmit = async () => {
+    try {
+      setSaving(true);
+
+      // 创建 BadCase
+      createBadCase({
+        text: testCase.text,
+        category,
+        severity,
+        status: BadCaseStatus.OPEN,
+        description,
+        expectedBehavior,
+        actualBehavior,
+        audioUrls: result.audioUrl ? { [result.provider]: result.audioUrl } : {},
+        priority,
+        tags,
+      });
+
+      onSuccess();
+    } catch (error) {
+      console.error('创建 BadCase 失败:', error);
+      alert('创建 BadCase 失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">标注 BadCase</h2>
+
+        <div className="space-y-4">
+          {/* 测试文本 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">测试文本</label>
+            <div className="px-4 py-2 bg-gray-50 rounded-lg text-gray-800">{testCase.text}</div>
+          </div>
+
+          {/* 供应商 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">供应商</label>
+            <div className="px-4 py-2 bg-gray-50 rounded-lg text-gray-800">{result.provider}</div>
+          </div>
+
+          {/* 音频播放 */}
+          {result.audioUrl && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">音频</label>
+              <audio controls className="w-full">
+                <source src={result.audioUrl} type="audio/mpeg" />
+              </audio>
+            </div>
+          )}
+
+          {/* 分类 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">问题分类 *</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value as keyof typeof BadCaseCategory)}
+              className="w-full px-4 py-2 border rounded-lg"
+            >
+              {Object.entries(BadCaseCategory).map(([key, value]) => (
+                <option key={key} value={key}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 严重程度 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">严重程度 *</label>
+            <select
+              value={severity}
+              onChange={(e) => setSeverity(e.target.value as BadCaseSeverity)}
+              className="w-full px-4 py-2 border rounded-lg"
+            >
+              <option value={BadCaseSeverity.MINOR}>次要</option>
+              <option value={BadCaseSeverity.MAJOR}>重要</option>
+              <option value={BadCaseSeverity.CRITICAL}>严重</option>
+            </select>
+          </div>
+
+          {/* 优先级 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              优先级 (1-5): {priority}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              value={priority}
+              onChange={(e) => setPriority(parseInt(e.target.value))}
+              className="w-full"
+            />
+          </div>
+
+          {/* 问题描述 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">问题描述</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg"
+              rows={3}
+              placeholder="描述发现的问题..."
+            />
+          </div>
+
+          {/* 期望行为 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">期望行为</label>
+            <textarea
+              value={expectedBehavior}
+              onChange={(e) => setExpectedBehavior(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg"
+              rows={2}
+              placeholder="描述期望的正确行为..."
+            />
+          </div>
+
+          {/* 实际行为 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">实际行为</label>
+            <textarea
+              value={actualBehavior}
+              onChange={(e) => setActualBehavior(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg"
+              rows={2}
+              placeholder="描述实际发生的行为..."
+            />
+          </div>
+
+          {/* 标签 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">标签</label>
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
+                className="flex-1 px-4 py-2 border rounded-lg"
+                placeholder="输入标签后按回车添加"
+              />
+              <button
+                onClick={handleAddTag}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                添加
+              </button>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm flex items-center gap-2"
+                  >
+                    {tag}
+                    <button
+                      onClick={() => handleRemoveTag(tag)}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 按钮 */}
+        <div className="flex gap-4 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+            disabled={saving}
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSubmit}
+            className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50"
+            disabled={saving}
+          >
+            {saving ? '保存中...' : '创建 BadCase'}
+          </button>
+        </div>
       </div>
     </div>
   );
