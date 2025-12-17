@@ -180,6 +180,24 @@ export default function CherryStyleProviderManager({
     onUpdate();
   };
 
+  const handleUpdateModel = (id: string, serviceType: 'asr' | 'tts', modelId: string) => {
+    const provider = providers.find(p => p.id === id);
+    if (!provider) return;
+
+    updateProvider(id, {
+      selectedModels: {
+        ...provider.selectedModels,
+        [serviceType]: modelId,
+      },
+    });
+    onUpdate();
+  };
+
+  const handleUpdateVoice = (id: string, voiceId: string) => {
+    updateProvider(id, { selectedVoice: voiceId });
+    onUpdate();
+  };
+
   const handleFetchModels = async (providerId: string) => {
     // 这里可以实现从API获取模型列表的功能
     // 目前从模板中获取
@@ -428,6 +446,8 @@ export default function CherryStyleProviderManager({
                     onDelete={handleDelete}
                     onToggleEnabled={handleToggleEnabled}
                     onFetchModels={handleFetchModels}
+                    onUpdateModel={handleUpdateModel}
+                    onUpdateVoice={handleUpdateVoice}
                   />
                 ))}
               </div>
@@ -450,6 +470,8 @@ export default function CherryStyleProviderManager({
                     onDelete={handleDelete}
                     onToggleEnabled={handleToggleEnabled}
                     onFetchModels={handleFetchModels}
+                    onUpdateModel={handleUpdateModel}
+                    onUpdateVoice={handleUpdateVoice}
                   />
                 ))}
               </div>

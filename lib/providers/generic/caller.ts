@@ -137,11 +137,11 @@ function buildAuthHeaders(config: GenericProviderConfig): Record<string, string>
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  
+
   if (config.requestHeaders) {
     Object.assign(headers, config.requestHeaders);
   }
-  
+
   switch (config.authType) {
     case 'bearer':
       if (config.apiKey) {
@@ -151,8 +151,11 @@ function buildAuthHeaders(config: GenericProviderConfig): Record<string, string>
     case 'apikey':
       if (config.apiKey) {
         headers['X-API-Key'] = config.apiKey;
-        // 有些服务商使用不同的头名称
-        headers['Authorization'] = `ApiKey ${config.apiKey}`;
+        // Cartesia 特殊处理：不添加 Authorization header
+        if (config.templateType !== 'cartesia') {
+          // 有些服务商使用不同的头名称
+          headers['Authorization'] = `ApiKey ${config.apiKey}`;
+        }
       }
       break;
     case 'custom':
@@ -164,7 +167,12 @@ function buildAuthHeaders(config: GenericProviderConfig): Record<string, string>
       }
       break;
   }
-  
+
+  // Cartesia 特殊处理：添加 Cartesia-Version header
+  if (config.templateType === 'cartesia') {
+    headers['Cartesia-Version'] = '2024-06-30';
+  }
+
   return headers;
 }
 
@@ -412,6 +420,11 @@ export async function callGenericTTS(
       language_type: languageType, // Qwen3-TTS 需要的语言类型
       format: 'mp3', // 默认格式
     };
+
+    // Cartesia 特殊处理：添加 transcription_speed 参数
+    if (config.templateType === 'cartesia') {
+      variables.transcription_speed = variables.speed;
+    }
     
     // 2. 构建请求体
     let requestBody: any;
@@ -449,7 +462,13 @@ export async function callGenericTTS(
         speed: variables.speed,
       };
     }
-    
+
+    // Cartesia 特殊处理：添加 transcription_speed 参数到请求体
+    if (config.templateType === 'cartesia' && variables.transcription_speed !== undefined) {
+      requestBody.transcription_speed = variables.transcription_speed;
+      console.log('✅ Cartesia: 已添加 transcription_speed =', variables.transcription_speed);
+    }
+
     // 3. 构建请求头
     const headers = buildAuthHeaders(config);
 

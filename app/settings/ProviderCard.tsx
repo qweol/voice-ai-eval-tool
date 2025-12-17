@@ -10,6 +10,8 @@ interface ProviderCardProps {
   onDelete: (id: string) => void;
   onToggleEnabled: (id: string, enabled: boolean) => void;
   onFetchModels?: (providerId: string) => Promise<void>;
+  onUpdateModel?: (id: string, serviceType: 'asr' | 'tts', modelId: string) => void;
+  onUpdateVoice?: (id: string, voiceId: string) => void;
 }
 
 export default function ProviderCard({
@@ -18,6 +20,8 @@ export default function ProviderCard({
   onDelete,
   onToggleEnabled,
   onFetchModels,
+  onUpdateModel,
+  onUpdateVoice,
 }: ProviderCardProps) {
   const [showModels, setShowModels] = useState(false);
   const [models, setModels] = useState<ModelDefinition[]>([]);
@@ -185,48 +189,89 @@ export default function ProviderCard({
 
             {showModels && models.length > 0 ? (
               <div className="space-y-2">
-                {models.map((model) => (
-                  <div
-                    key={model.id}
-                    className="p-2 bg-gray-50 rounded border border-gray-200"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-medium text-sm text-gray-800">{model.name}</span>
-                        {model.description && (
-                          <p className="text-xs text-gray-600 mt-1">{model.description}</p>
-                        )}
-                      </div>
-                      <span className={`px-2 py-1 text-xs rounded ${
-                        model.type === 'asr' 
-                          ? 'bg-blue-100 text-blue-700' 
-                          : 'bg-purple-100 text-purple-700'
-                      }`}>
-                        {model.type.toUpperCase()}
-                      </span>
-                    </div>
-                    {model.type === 'tts' && model.voices && model.voices.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-xs text-gray-600 mb-1">音色 ({model.voices.length}种):</p>
-                        <div className="flex flex-wrap gap-1">
-                          {model.voices.slice(0, 5).map((voice) => (
-                            <span
-                              key={voice.id}
-                              className="px-2 py-0.5 bg-white text-xs rounded border border-gray-200"
+                {models.map((model) => {
+                  const isSelected = model.type === 'asr'
+                    ? provider.selectedModels?.asr === model.id
+                    : provider.selectedModels?.tts === model.id;
+
+                  return (
+                    <div
+                      key={model.id}
+                      className={`p-2 rounded border transition-all ${
+                        isSelected
+                          ? 'bg-blue-50 border-blue-300 shadow-sm'
+                          : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-sm text-gray-800">{model.name}</span>
+                            {isSelected && (
+                              <span className="px-2 py-0.5 bg-blue-600 text-white text-xs rounded">
+                                当前使用
+                              </span>
+                            )}
+                          </div>
+                          {model.description && (
+                            <p className="text-xs text-gray-600 mt-1">{model.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 text-xs rounded ${
+                            model.type === 'asr'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-purple-100 text-purple-700'
+                          }`}>
+                            {model.type.toUpperCase()}
+                          </span>
+                          {onUpdateModel && !isSelected && (
+                            <button
+                              onClick={() => onUpdateModel(provider.id, model.type, model.id)}
+                              className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
                             >
-                              {voice.name}
-                            </span>
-                          ))}
-                          {model.voices.length > 5 && (
-                            <span className="px-2 py-0.5 text-xs text-gray-500">
-                              +{model.voices.length - 5} 更多
-                            </span>
+                              选择
+                            </button>
                           )}
                         </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {model.type === 'tts' && model.voices && model.voices.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-600 mb-1">音色 ({model.voices.length}种):</p>
+                          {isSelected && onUpdateVoice ? (
+                            <select
+                              value={provider.selectedVoice || model.voices[0].id}
+                              onChange={(e) => onUpdateVoice(provider.id, e.target.value)}
+                              className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              {model.voices.map((voice) => (
+                                <option key={voice.id} value={voice.id}>
+                                  {voice.name} {voice.description ? `- ${voice.description}` : ''}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {model.voices.slice(0, 5).map((voice) => (
+                                <span
+                                  key={voice.id}
+                                  className="px-2 py-0.5 bg-white text-xs rounded border border-gray-200"
+                                >
+                                  {voice.name}
+                                </span>
+                              ))}
+                              {model.voices.length > 5 && (
+                                <span className="px-2 py-0.5 text-xs text-gray-500">
+                                  +{model.voices.length - 5} 更多
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-sm text-gray-500 italic">

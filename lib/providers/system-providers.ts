@@ -43,6 +43,37 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
+  // Cartesia 预置配置
+  if (process.env.CARTESIA_API_KEY) {
+    const cartesiaTemplate = templates.cartesia;
+
+    providers.push({
+      id: 'system-cartesia',
+      name: 'Cartesia（系统预置）',
+      type: 'generic',
+      serviceType: 'tts', // Cartesia 仅支持 TTS
+      apiUrl: cartesiaTemplate.defaultApiUrl,
+      method: cartesiaTemplate.defaultMethod,
+      authType: cartesiaTemplate.authType,
+      apiKey: process.env.CARTESIA_API_KEY,
+      requestBody: cartesiaTemplate.requestBodyTemplate.tts, // 使用 TTS 模板
+      responseTextPath: cartesiaTemplate.responseTextPath,
+      responseAudioPath: cartesiaTemplate.responseAudioPath,
+      responseAudioFormat: cartesiaTemplate.responseAudioFormat,
+      errorPath: cartesiaTemplate.errorPath,
+      templateType: 'cartesia',
+      selectedModels: {
+        asr: undefined, // Cartesia 不支持 ASR
+        tts: cartesiaTemplate.defaultModel?.tts,
+      },
+      selectedVoice: '694f9389-aac1-45b6-b726-9d9369183238', // 默认使用 British Lady
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
   return providers;
 }
 

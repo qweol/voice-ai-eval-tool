@@ -10,6 +10,9 @@ export interface AppConfig {
   // 通用API配置
   providers: GenericProviderConfig[];
 
+  // 系统预置供应商的覆盖配置（用于保存用户对系统预置供应商的修改）
+  systemProviderOverrides?: Record<string, Partial<GenericProviderConfig>>;
+
   // BadCase 管理
   badCases: BadCase[];
 
@@ -24,6 +27,7 @@ export interface AppConfig {
 
 const DEFAULT_CONFIG: AppConfig = {
   providers: [],
+  systemProviderOverrides: {},
   badCases: [],
   tts: {
     defaultSpeed: 1.0,
@@ -93,15 +97,34 @@ export function addProvider(config: GenericProviderConfig): void {
 
 /**
  * 更新API配置
+ * 支持更新用户自定义供应商和系统预置供应商
  */
 export function updateProvider(id: string, config: Partial<GenericProviderConfig>): void {
   const appConfig = getConfig();
+
+  // 1. 先尝试更新用户自定义供应商
   const index = appConfig.providers.findIndex(p => p.id === id);
   if (index !== -1) {
     appConfig.providers[index] = {
       ...appConfig.providers[index],
       ...config,
     };
+    saveConfig(appConfig);
+    return;
+  }
+
+  // 2. 如果不是用户自定义供应商，则保存为系统预置供应商的覆盖配置
+  if (id.startsWith('system-')) {
+    if (!appConfig.systemProviderOverrides) {
+      appConfig.systemProviderOverrides = {};
+    }
+
+    // 合并现有的覆盖配置
+    appConfig.systemProviderOverrides[id] = {
+      ...appConfig.systemProviderOverrides[id],
+      ...config,
+    };
+
     saveConfig(appConfig);
   }
 }
@@ -150,12 +173,26 @@ export async function getAllProvidersWithSystem(): Promise<GenericProviderConfig
     // 1. 获取系统预置供应商
     const systemResponse = await fetch('/api/providers/system');
     const systemData = await systemResponse.json();
-    const systemProviders = systemData.success ? systemData.data : [];
+    let systemProviders = systemData.success ? systemData.data : [];
 
-    // 2. 获取用户自定义供应商
-    const userProviders = getConfig().providers;
+    // 2. 获取用户配置（包括覆盖配置）
+    const appConfig = getConfig();
+    const userProviders = appConfig.providers;
+    const overrides = appConfig.systemProviderOverrides || {};
 
-    // 3. 合并（系统预置在前）
+    // 3. 应用覆盖配置到系统预置供应商
+    systemProviders = systemProviders.map((provider: GenericProviderConfig) => {
+      const override = overrides[provider.id];
+      if (override) {
+        return {
+          ...provider,
+          ...override,
+        };
+      }
+      return provider;
+    });
+
+    // 4. 合并（系统预置在前）
     return [...systemProviders, ...userProviders];
   } catch (error) {
     console.error('获取系统预置供应商失败，仅返回用户自定义供应商:', error);

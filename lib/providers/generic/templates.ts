@@ -233,6 +233,82 @@ export const qwenTemplate: APITemplate = {
 };
 
 /**
+ * Cartesia 音色定义
+ * 注意：这是初期硬编码的常用音色列表，后续可通过 /voices API 动态获取
+ */
+const cartesiaVoices: VoiceDefinition[] = [
+  {
+    id: '694f9389-aac1-45b6-b726-9d9369183238',
+    name: 'British Lady',
+    description: 'Professional British female voice',
+    gender: 'female',
+    language: 'en'
+  },
+  {
+    id: 'a0e99841-438c-4a64-b679-ae501e7d6091',
+    name: 'Barbershop Man',
+    description: 'Warm and friendly male voice',
+    gender: 'male',
+    language: 'en'
+  },
+  {
+    id: '79a125e8-cd45-4c13-8a67-188112f4dd22',
+    name: 'Calm Lady',
+    description: 'Calm and soothing female voice',
+    gender: 'female',
+    language: 'en'
+  },
+  {
+    id: '87748186-23bb-4158-a1eb-332911b0b708',
+    name: 'Newsman',
+    description: 'Professional news anchor male voice',
+    gender: 'male',
+    language: 'en'
+  },
+  {
+    id: '2ee87190-8f84-4925-97da-e52547f9462c',
+    name: 'Storyteller Lady',
+    description: 'Expressive storytelling female voice',
+    gender: 'female',
+    language: 'en'
+  },
+];
+
+/**
+ * Cartesia 模型定义
+ * 注意：Cartesia 仅支持 TTS，不支持 ASR
+ */
+const cartesiaModels: ModelDefinition[] = [
+  {
+    id: 'sonic-3',
+    name: 'Sonic 3',
+    description: 'Latest Sonic model with improved quality and naturalness',
+    type: 'tts',
+    voices: cartesiaVoices,
+    supportedFormats: ['wav', 'pcm', 'mp3', 'flac', 'mulaw'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'sonic-english',
+    name: 'Sonic English',
+    description: 'Optimized for English language synthesis',
+    type: 'tts',
+    voices: cartesiaVoices,
+    supportedFormats: ['wav', 'pcm', 'mp3', 'flac', 'mulaw'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'sonic-multilingual',
+    name: 'Sonic Multilingual',
+    description: 'Supports multiple languages',
+    type: 'tts',
+    voices: cartesiaVoices,
+    supportedFormats: ['wav', 'pcm', 'mp3', 'flac', 'mulaw'],
+    speedRange: [0.5, 2.0],
+  },
+];
+
+/**
  * 豆包风格模板
  * 适用于：字节跳动豆包语音服务
  */
@@ -270,6 +346,66 @@ export const doubaoTemplate: APITemplate = {
 };
 
 /**
+ * Cartesia 风格模板
+ * 适用于：Cartesia TTS API
+ * 注意：
+ * - Cartesia 仅支持 TTS，不支持 ASR
+ * - 使用 X-API-Key 认证
+ * - 需要 Cartesia-Version header
+ * - 响应直接返回音频流
+ */
+export const cartesiaTemplate: APITemplate = {
+  id: 'cartesia',
+  name: 'Cartesia风格',
+  description: '适用于 Cartesia TTS API，支持高质量语音合成',
+  defaultApiUrl: 'https://api.cartesia.ai/tts/bytes',
+  defaultMethod: 'POST',
+  authType: 'apikey',
+  isBuiltin: true,
+  requestBodyTemplate: {
+    // Cartesia 不支持 ASR
+    asr: undefined,
+    // TTS 请求体模板
+    // 注意：这里使用占位符，实际请求时需要在 caller.ts 中特殊处理 voice 对象
+    tts: JSON.stringify({
+      model_id: '{model}',
+      transcript: '{text}',
+      voice: {
+        mode: 'id',
+        id: '{voice}',
+      },
+      output_format: {
+        container: 'mp3',
+        encoding: 'mp3',
+        sample_rate: 24000,
+      },
+      language: '{language}',
+    }, null, 2),
+  },
+  responseTextPath: undefined, // Cartesia 不支持 ASR
+  responseAudioPath: '', // 直接返回音频流
+  responseAudioFormat: 'stream',
+  errorPath: 'error.message',
+  variables: [
+    { description: '模型名称（如：sonic-3, sonic-english）', required: true, default: 'sonic-3' },
+    { description: '音色ID', required: true, default: '694f9389-aac1-45b6-b726-9d9369183238' },
+    { description: '语言代码（如：en, zh）', required: false, default: 'en' },
+  ],
+
+  // 模型列表
+  models: cartesiaModels,
+
+  // 不允许自定义模型（Cartesia 有固定的模型列表）
+  allowCustomModel: false,
+
+  // 默认模型
+  defaultModel: {
+    asr: undefined, // 不支持 ASR
+    tts: 'sonic-3',
+  },
+};
+
+/**
  * 自定义模板（完全自定义）
  */
 export const customTemplate: APITemplate = {
@@ -304,6 +440,7 @@ export const templates: Record<TemplateType, APITemplate> = {
   openai: openaiTemplate,
   qwen: qwenTemplate,
   doubao: doubaoTemplate,
+  cartesia: cartesiaTemplate,
   custom: customTemplate,
 };
 
