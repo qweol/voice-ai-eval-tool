@@ -54,6 +54,10 @@ export async function POST(request: NextRequest) {
     console.log('系统预置供应商数量:', systemProviders.length);
     console.log('QWEN_API_KEY 环境变量:', process.env.QWEN_API_KEY ? '已设置' : '未设置');
     console.log('CARTESIA_API_KEY 环境变量:', process.env.CARTESIA_API_KEY ? '已设置' : '未设置');
+    console.log('OPENAI_API_KEY 环境变量:', process.env.OPENAI_API_KEY ? '已设置' : '未设置');
+    systemProviders.forEach(sp => {
+      console.log(`  - ${sp.name} (${sp.id}): API Key 长度 = ${sp.apiKey?.length || 0}`);
+    });
 
     // 合并供应商配置：如果是系统预置供应商，使用服务器端的完整配置
     const mergedProviders = allProviders.map(provider => {
@@ -63,11 +67,23 @@ export async function POST(request: NextRequest) {
         const systemProvider = systemProviders.find(sp => sp.id === provider.id);
         if (systemProvider) {
           console.log('找到系统配置，API Key 长度:', systemProvider.apiKey?.length);
-          // 合并用户的覆盖配置（如模型、音色选择），但保留系统的 API Key
-          const { apiKey: _, ...userOverrides } = provider;
+
+          // 只允许覆盖以下用户可配置的字段，其他关键配置保持系统预置的值
+          const allowedOverrides = {
+            selectedModels: provider.selectedModels,
+            selectedVoice: provider.selectedVoice,
+            customModels: provider.customModels,
+            enabled: provider.enabled,
+          };
+
+          // 过滤掉 undefined 的值
+          const validOverrides = Object.fromEntries(
+            Object.entries(allowedOverrides).filter(([_, v]) => v !== undefined)
+          );
+
           return {
             ...systemProvider,
-            ...userOverrides,
+            ...validOverrides,
             apiKey: systemProvider.apiKey, // 确保使用系统的 API Key
           };
         } else {

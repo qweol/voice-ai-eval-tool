@@ -536,15 +536,32 @@ export async function callGenericTTS(
         if (audioUrl) {
           console.log('从 URL 获取音频:', audioUrl);
           try {
-            const audioResponse = await fetch(audioUrl);
+            const audioResponse = await fetch(audioUrl, {
+              method: 'GET',
+              // 添加超时和重试机制
+              signal: AbortSignal.timeout(30000), // 30秒超时
+            });
+            console.log('音频下载响应状态:', audioResponse.status, audioResponse.statusText);
+            console.log('音频下载响应头:', Object.fromEntries(audioResponse.headers.entries()));
+
             if (!audioResponse.ok) {
-              throw new Error(`从URL下载音频失败: ${audioResponse.statusText}`);
+              const errorText = await audioResponse.text();
+              console.error('音频下载失败响应:', errorText);
+              throw new Error(`从URL下载音频失败: ${audioResponse.status} ${audioResponse.statusText}`);
             }
-            audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
+
+            const arrayBuffer = await audioResponse.arrayBuffer();
+            audioBuffer = Buffer.from(arrayBuffer);
             console.log('从 URL 获取音频成功，大小:', audioBuffer.length, 'bytes');
+            console.log('✅ 音频下载完成，准备返回结果');
           } catch (error: any) {
-            console.error('从URL下载音频失败:', error);
-            throw new Error(`从URL下载音频失败: ${error.message}`);
+            console.error('从URL下载音频失败，详细错误:', {
+              name: error.name,
+              message: error.message,
+              cause: error.cause,
+              stack: error.stack?.split('\n').slice(0, 3).join('\n'),
+            });
+            throw new Error(`从URL下载音频失败: ${error.message} (${error.name})`);
           }
         } else {
           console.error('无法提取音频数据，完整响应结构:', JSON.stringify(responseData, null, 2));
@@ -586,13 +603,16 @@ export async function callGenericTTS(
     }
 
     const duration = (Date.now() - startTime) / 1000;
-    
+
+    console.log('🎉 TTS 调用成功，准备返回结果，音频大小:', audioBuffer!.length, 'bytes');
+
     return {
       audioBuffer,
       duration,
       format: 'mp3', // 默认格式，实际应该从响应或配置中获取
     };
   } catch (error: any) {
+    console.error('❌ TTS 调用失败，错误:', error.message);
     throw new Error(`通用TTS API调用失败: ${error.message}`);
   }
 }

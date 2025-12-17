@@ -74,6 +74,41 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
+  // OpenAI 预置配置
+  if (process.env.OPENAI_API_KEY) {
+    const openaiTemplate = templates.openai;
+
+    // 使用 OPENAI_TTS_API_URL 环境变量指定的 URL
+    // 如果没有设置，使用默认的官方 URL
+    const ttsApiUrl = process.env.OPENAI_TTS_API_URL || 'https://api.openai.com/v1/audio/speech';
+
+    providers.push({
+      id: 'system-openai',
+      name: 'OpenAI（系统预置）',
+      type: 'generic',
+      serviceType: 'both',
+      apiUrl: ttsApiUrl,
+      method: openaiTemplate.defaultMethod,
+      authType: openaiTemplate.authType,
+      apiKey: process.env.OPENAI_API_KEY,
+      requestBody: openaiTemplate.requestBodyTemplate.tts, // 默认使用 TTS 模板
+      responseTextPath: openaiTemplate.responseTextPath,
+      responseAudioPath: openaiTemplate.responseAudioPath,
+      responseAudioFormat: openaiTemplate.responseAudioFormat,
+      errorPath: openaiTemplate.errorPath,
+      templateType: 'openai',
+      selectedModels: {
+        asr: openaiTemplate.defaultModel?.asr,
+        tts: openaiTemplate.defaultModel?.tts,
+      },
+      selectedVoice: 'alloy', // 默认使用 alloy 音色
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
   return providers;
 }
 
