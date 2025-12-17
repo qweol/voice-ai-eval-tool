@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getConfig, getAllEnabledProviders, createBadCase } from '@/lib/utils/config';
+import { getConfig, getAllEnabledProvidersWithSystem, createBadCase } from '@/lib/utils/config';
 import { GenericProviderConfig, VoiceDefinition } from '@/lib/providers/generic/types';
 import { templates } from '@/lib/providers/generic/templates';
 import { BadCaseStatus, BadCaseSeverity } from '@/lib/types';
@@ -35,41 +35,45 @@ export default function TTSPage() {
     const config = getConfig();
     setSpeed(config.tts.defaultSpeed);
 
-    // 获取所有启用的提供者
-    const allProviders = getAllEnabledProviders();
-    
-    // 筛选支持TTS的提供者
-    const ttsProviders = allProviders.filter((p) => {
-      return p.serviceType === 'tts' || p.serviceType === 'both';
-    });
+    // 获取所有启用的提供者（包括系统预置）
+    const loadProviders = async () => {
+      const allProviders = await getAllEnabledProvidersWithSystem();
 
-    // 初始化供应商音色配置
-    const voices = ttsProviders.map((p) => {
-      // 获取Provider配置的音色，如果没有则使用默认音色
-      let defaultVoice = p.selectedVoice || '';
+      // 筛选支持TTS的提供者
+      const ttsProviders = allProviders.filter((p) => {
+        return p.serviceType === 'tts' || p.serviceType === 'both';
+      });
 
-      // 如果Provider没有配置音色，尝试从模板获取默认音色
-      if (!defaultVoice && p.templateType) {
-        const template = templates[p.templateType];
-        if (template.models) {
-          const ttsModel = template.models.find(
-            m => m.type === 'tts' && m.id === p.selectedModels?.tts
-          );
-          if (ttsModel?.voices && ttsModel.voices.length > 0) {
-            defaultVoice = ttsModel.voices[0].id;
+      // 初始化供应商音色配置
+      const voices = ttsProviders.map((p) => {
+        // 获取Provider配置的音色，如果没有则使用默认音色
+        let defaultVoice = p.selectedVoice || '';
+
+        // 如果Provider没有配置音色，尝试从模板获取默认音色
+        if (!defaultVoice && p.templateType) {
+          const template = templates[p.templateType];
+          if (template.models) {
+            const ttsModel = template.models.find(
+              m => m.type === 'tts' && m.id === p.selectedModels?.tts
+            );
+            if (ttsModel?.voices && ttsModel.voices.length > 0) {
+              defaultVoice = ttsModel.voices[0].id;
+            }
           }
         }
-      }
 
-      return {
-        providerId: p.id,
-        voice: defaultVoice || 'alloy',
-        enabled: true,
-      };
-    });
+        return {
+          providerId: p.id,
+          voice: defaultVoice || 'alloy',
+          enabled: true,
+        };
+      });
 
-    setProviderVoices(voices);
-    setEnabledProviders(ttsProviders);
+      setProviderVoices(voices);
+      setEnabledProviders(ttsProviders);
+    };
+
+    loadProviders();
   }, []);
 
   const updateProviderVoice = (providerId: string, voice: string) => {
@@ -104,10 +108,10 @@ export default function TTSPage() {
     setResults([]);
 
     try {
-      // 获取启用的API
-      const config = getConfig();
-      const providers = config.providers.filter(
-        (p) => p.enabled && (p.serviceType === 'tts' || p.serviceType === 'both')
+      // 获取所有启用的供应商（包括系统预置）
+      const allProviders = await getAllEnabledProvidersWithSystem();
+      const providers = allProviders.filter(
+        (p) => p.serviceType === 'tts' || p.serviceType === 'both'
       );
 
       const res = await fetch('/api/tts', {

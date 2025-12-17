@@ -97,6 +97,11 @@ export default function ProviderCard({
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2">
             <h3 className="text-lg font-semibold text-gray-800">{provider.name}</h3>
+            {provider.isSystem && (
+              <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded font-medium">
+                系统预置
+              </span>
+            )}
             <span className={`px-2 py-1 text-xs rounded font-medium ${getStatusColor()}`}>
               {provider.enabled ? '已启用' : '已禁用'}
             </span>
@@ -231,24 +236,33 @@ export default function ProviderCard({
           </div>
 
           {/* 操作按钮 */}
-          <div className="flex gap-2 pt-2 border-t border-gray-200">
-            <button
-              onClick={() => onEdit(provider)}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              编辑
-            </button>
-            <button
-              onClick={() => {
-                if (confirm(`确定要删除供应商 "${provider.name}" 吗？`)) {
-                  onDelete(provider.id);
-                }
-              }}
-              className="flex-1 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
-            >
-              删除
-            </button>
-          </div>
+          {provider.isSystem ? (
+            <div className="pt-2 border-t border-gray-200">
+              <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+                <p className="font-medium text-blue-700 mb-1">系统预置供应商</p>
+                <p className="text-xs">此供应商由系统管理员配置，不可编辑或删除。您可以通过上方的开关来启用或禁用此供应商。</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2 pt-2 border-t border-gray-200">
+              <button
+                onClick={() => onEdit(provider)}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                编辑
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`确定要删除供应商 "${provider.name}" 吗？`)) {
+                    onDelete(provider.id);
+                  }
+                }}
+                className="flex-1 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+              >
+                删除
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

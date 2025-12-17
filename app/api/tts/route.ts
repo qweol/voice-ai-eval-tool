@@ -4,6 +4,7 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import { TTSOptions } from '@/lib/types';
 import { GenericProviderConfig } from '@/lib/providers/generic/types';
+import { getSystemProviders } from '@/lib/providers/system-providers';
 
 interface ProviderVoice {
   providerId: string;
@@ -45,9 +46,25 @@ export async function POST(request: NextRequest) {
     // 获取启用的提供者
     const enabledProviderVoices = providerVoices?.filter((pv) => pv.enabled) || [];
     const allProviders = providers || [];
-    
+
+    // 获取系统预置供应商（包含完整 API Key）
+    const systemProviders = getSystemProviders();
+
+    // 合并供应商配置：如果是系统预置供应商，使用服务器端的完整配置
+    const mergedProviders = allProviders.map(provider => {
+      if (provider.isSystem) {
+        // 从系统预置供应商中查找完整配置
+        const systemProvider = systemProviders.find(sp => sp.id === provider.id);
+        if (systemProvider) {
+          console.log(`使用系统预置供应商: ${systemProvider.name}`);
+          return systemProvider;
+        }
+      }
+      return provider;
+    });
+
     // 筛选支持TTS的提供者
-    const ttsProviders = allProviders.filter(
+    const ttsProviders = mergedProviders.filter(
       (p) => p.serviceType === 'tts' || p.serviceType === 'both'
     );
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { callGenericASR } from '@/lib/providers/generic/caller';
 import { ASROptions } from '@/lib/types';
 import { GenericProviderConfig } from '@/lib/providers/generic/types';
+import { getSystemProviders } from '@/lib/providers/system-providers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -29,6 +30,22 @@ export async function POST(request: NextRequest) {
       ? JSON.parse(providersStr)
       : [];
 
+    // 获取系统预置供应商（包含完整 API Key）
+    const systemProviders = getSystemProviders();
+
+    // 合并供应商配置：如果是系统预置供应商，使用服务器端的完整配置
+    const mergedProviders = providers.map(provider => {
+      if (provider.isSystem) {
+        // 从系统预置供应商中查找完整配置
+        const systemProvider = systemProviders.find(sp => sp.id === provider.id);
+        if (systemProvider) {
+          console.log(`使用系统预置供应商: ${systemProvider.name}`);
+          return systemProvider;
+        }
+      }
+      return provider;
+    });
+
     // 构建ASR选项
     const asrOptions: ASROptions = {
       language,
@@ -36,7 +53,7 @@ export async function POST(request: NextRequest) {
     };
 
     // 筛选支持ASR的提供者
-    const asrProviders = providers.filter(
+    const asrProviders = mergedProviders.filter(
       (p) => p.serviceType === 'asr' || p.serviceType === 'both'
     );
 

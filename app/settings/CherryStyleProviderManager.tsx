@@ -411,17 +411,50 @@ export default function CherryStyleProviderManager({
           <p className="text-sm">点击"添加供应商"按钮开始添加</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {providers.map((provider) => (
-            <ProviderCard
-              key={provider.id}
-              provider={provider}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onToggleEnabled={handleToggleEnabled}
-              onFetchModels={handleFetchModels}
-            />
-          ))}
+        <div className="space-y-6">
+          {/* 系统预置供应商 */}
+          {providers.filter(p => p.isSystem).length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">系统预置</span>
+                <span>系统预置供应商</span>
+              </h3>
+              <div className="space-y-4">
+                {providers.filter(p => p.isSystem).map((provider) => (
+                  <ProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onToggleEnabled={handleToggleEnabled}
+                    onFetchModels={handleFetchModels}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 用户自定义供应商 */}
+          {providers.filter(p => !p.isSystem).length > 0 && (
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded">用户自定义</span>
+                <span>用户自定义供应商</span>
+              </h3>
+              <div className="space-y-4">
+                {providers.filter(p => !p.isSystem).map((provider) => (
+                  <ProviderCard
+                    key={provider.id}
+                    provider={provider}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onToggleEnabled={handleToggleEnabled}
+                    onFetchModels={handleFetchModels}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

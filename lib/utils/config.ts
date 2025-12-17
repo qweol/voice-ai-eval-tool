@@ -141,6 +141,37 @@ export function getAllEnabledProviders(): ProviderConfig[] {
   return config.providers.filter(p => p.enabled);
 }
 
+/**
+ * 获取所有供应商（系统预置 + 用户自定义）
+ * 用于前端显示
+ */
+export async function getAllProvidersWithSystem(): Promise<GenericProviderConfig[]> {
+  try {
+    // 1. 获取系统预置供应商
+    const systemResponse = await fetch('/api/providers/system');
+    const systemData = await systemResponse.json();
+    const systemProviders = systemData.success ? systemData.data : [];
+
+    // 2. 获取用户自定义供应商
+    const userProviders = getConfig().providers;
+
+    // 3. 合并（系统预置在前）
+    return [...systemProviders, ...userProviders];
+  } catch (error) {
+    console.error('获取系统预置供应商失败，仅返回用户自定义供应商:', error);
+    // 如果获取系统预置失败，只返回用户自定义供应商
+    return getConfig().providers;
+  }
+}
+
+/**
+ * 获取所有启用的供应商（包括系统预置）
+ */
+export async function getAllEnabledProvidersWithSystem(): Promise<GenericProviderConfig[]> {
+  const allProviders = await getAllProvidersWithSystem();
+  return allProviders.filter(p => p.enabled);
+}
+
 // ============================================
 // BadCase 管理函数
 // ============================================
@@ -149,7 +180,7 @@ export function getAllEnabledProviders(): ProviderConfig[] {
  * 生成唯一 ID
  */
 function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
 /**

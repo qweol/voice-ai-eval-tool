@@ -2,19 +2,33 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getConfig, saveConfig, resetConfig, type AppConfig } from '@/lib/utils/config';
+import { getConfig, saveConfig, resetConfig, getAllProvidersWithSystem, type AppConfig } from '@/lib/utils/config';
+import { GenericProviderConfig } from '@/lib/providers/generic/types';
 import CherryStyleProviderManager from './CherryStyleProviderManager';
 import TemplateManager from './TemplateManager';
 import ModelPlaza from './ModelPlaza';
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [allProviders, setAllProviders] = useState<GenericProviderConfig[]>([]);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string>('');
 
   useEffect(() => {
     setConfig(getConfig());
+    loadAllProviders();
   }, []);
+
+  const loadAllProviders = async () => {
+    try {
+      const providers = await getAllProvidersWithSystem();
+      setAllProviders(providers);
+    } catch (error) {
+      console.error('加载供应商失败:', error);
+      // 如果加载失败，只显示用户自定义供应商
+      setAllProviders(getConfig().providers);
+    }
+  };
 
   const handleSave = () => {
     if (!config) return;
@@ -33,6 +47,7 @@ export default function SettingsPage() {
     if (confirm('确定要重置所有配置吗？这将清除所有已保存的API密钥。')) {
       resetConfig();
       setConfig(getConfig());
+      loadAllProviders(); // 重新加载供应商列表
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     }
@@ -40,6 +55,7 @@ export default function SettingsPage() {
 
   const handleProviderUpdate = () => {
     setConfig(getConfig());
+    loadAllProviders(); // 重新加载供应商列表
   };
 
   if (!config) {
@@ -77,13 +93,13 @@ export default function SettingsPage() {
 
         {/* 模型服务管理 - Cherry Studio风格 */}
         <CherryStyleProviderManager
-          providers={config.providers || []}
+          providers={allProviders}
           onUpdate={handleProviderUpdate}
         />
 
         {/* 模型广场 */}
         <div className="mt-6">
-          <ModelPlaza providers={config.providers || []} />
+          <ModelPlaza providers={allProviders} />
         </div>
 
         {/* 模板管理 */}

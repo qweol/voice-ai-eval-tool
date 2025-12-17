@@ -93,6 +93,10 @@ export interface GenericProviderConfig {
 
   // 启用状态
   enabled: boolean;
+
+  // 系统预置标识（可选）
+  isSystem?: boolean; // 是否为系统预置供应商
+  readonly?: boolean; // 是否只读（不可编辑/删除）
 }
 
 /**

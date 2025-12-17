@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getConfig, getAllEnabledProviders } from '@/lib/utils/config';
+import { getConfig, getAllEnabledProvidersWithSystem } from '@/lib/utils/config';
 import { GenericProviderConfig } from '@/lib/providers/generic/types';
 
 interface ASRResult {
@@ -27,16 +27,20 @@ export default function ASRPage() {
     const config = getConfig();
     setLanguage(config.asr.defaultLanguage);
     setFormat(config.asr.defaultFormat);
-    
-    // 获取所有启用的提供者
-    const allProviders = getAllEnabledProviders();
-    
-    // 筛选支持ASR的提供者
-    const asrProviders = allProviders.filter((p) => {
-      return p.serviceType === 'asr' || p.serviceType === 'both';
-    });
-    
-    setEnabledProviders(asrProviders);
+
+    // 获取所有启用的提供者（包括系统预置）
+    const loadProviders = async () => {
+      const allProviders = await getAllEnabledProvidersWithSystem();
+
+      // 筛选支持ASR的提供者
+      const asrProviders = allProviders.filter((p) => {
+        return p.serviceType === 'asr' || p.serviceType === 'both';
+      });
+
+      setEnabledProviders(asrProviders);
+    };
+
+    loadProviders();
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,10 +68,10 @@ export default function ASRPage() {
     setResults([]);
 
     try {
-      // 获取启用的API
-      const config = getConfig();
-      const providers = config.providers.filter(
-        (p) => p.enabled && (p.serviceType === 'asr' || p.serviceType === 'both')
+      // 获取所有启用的供应商（包括系统预置）
+      const allProviders = await getAllEnabledProvidersWithSystem();
+      const providers = allProviders.filter(
+        (p) => p.serviceType === 'asr' || p.serviceType === 'both'
       );
 
       const formData = new FormData();
