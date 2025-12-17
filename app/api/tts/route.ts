@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
           return {
             provider: provider.name,
-            audioUrl: `/audio/${filename}`,
+            audioUrl: `/api/storage/audio/${filename}`,
             duration: result.duration,
             status: 'success',
           };

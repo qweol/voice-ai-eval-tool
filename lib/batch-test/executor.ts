@@ -111,8 +111,8 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             await fs.mkdir(audioDir, { recursive: true });
             await fs.writeFile(audioPath, result.audioBuffer);
 
-            // 直接使用静态资源路径，避免读取不到文件
-            const audioUrl = `/audio/${audioFileName}`;
+            // 使用 API 路由访问音频文件
+            const audioUrl = `/api/storage/audio/${audioFileName}`;
 
             // 计算成本（简化版，实际应该根据供应商定价）
             const cost = calculateCost(testCase.text.length, providerIdStr);
