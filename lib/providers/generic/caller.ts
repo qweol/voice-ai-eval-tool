@@ -96,10 +96,17 @@ function replaceVariables(template: string, variables: RequestVariables): string
   for (const [key, value] of Object.entries(variables)) {
     const regex = new RegExp(`\\{${key}\\}`, 'g');
     if (value !== undefined && value !== null) {
-      // 对字符串类型的值进行 JSON 转义
-      const stringValue = typeof value === 'string'
-        ? escapeJsonString(value)
-        : String(value);
+      // 对字符串类型的值进行 JSON 转义，数字和布尔值保持原样
+      let stringValue: string;
+      if (typeof value === 'string') {
+        stringValue = escapeJsonString(value);
+      } else if (typeof value === 'number' || typeof value === 'boolean') {
+        // 数字和布尔值直接转换，不加引号
+        stringValue = String(value);
+      } else {
+        // 其他类型（对象、数组等）转换为 JSON 字符串
+        stringValue = JSON.stringify(value);
+      }
       result = result.replace(regex, stringValue);
     }
   }
@@ -420,11 +427,6 @@ export async function callGenericTTS(
       language_type: languageType, // Qwen3-TTS 需要的语言类型
       format: 'mp3', // 默认格式
     };
-
-    // Cartesia 特殊处理：添加 transcription_speed 参数
-    if (config.templateType === 'cartesia') {
-      variables.transcription_speed = variables.speed;
-    }
     
     // 2. 构建请求体
     let requestBody: any;
@@ -451,6 +453,15 @@ export async function callGenericTTS(
       } catch (error: any) {
         throw new Error(`请求体模板解析失败: ${error.message}`);
       }
+
+      // Cartesia 特殊处理：将 speed 从字符串转换为数字
+      if (config.templateType === 'cartesia' && requestBody.speed !== undefined) {
+        const speedValue = parseFloat(requestBody.speed);
+        if (!isNaN(speedValue)) {
+          requestBody.speed = 1;
+          console.log('✅ Cartesia: 测试使用 speed = 0.5 (原始值为', speedValue, ')');
+        }
+      }
     } else {
       // 如果没有模板，使用默认格式
       console.warn('⚠️ 警告: config.requestBody 为空，使用默认格式');
@@ -461,12 +472,6 @@ export async function callGenericTTS(
         response_format: 'mp3',
         speed: variables.speed,
       };
-    }
-
-    // Cartesia 特殊处理：添加 transcription_speed 参数到请求体
-    if (config.templateType === 'cartesia' && variables.transcription_speed !== undefined) {
-      requestBody.transcription_speed = variables.transcription_speed;
-      console.log('✅ Cartesia: 已添加 transcription_speed =', variables.transcription_speed);
     }
 
     // 3. 构建请求头

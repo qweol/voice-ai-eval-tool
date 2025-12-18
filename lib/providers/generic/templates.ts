@@ -377,9 +377,10 @@ export const cartesiaTemplate: APITemplate = {
       output_format: {
         container: 'mp3',
         encoding: 'mp3',
-        sample_rate: 24000,
+        sample_rate: 44100,
       },
       language: '{language}',
+      speed: '{speed}',
     }, null, 2),
   },
   responseTextPath: undefined, // Cartesia 不支持 ASR
