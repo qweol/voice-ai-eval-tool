@@ -95,13 +95,13 @@ export const openaiTemplate: APITemplate = {
       language: '{language}',
       response_format: 'json',
     }, null, 2),
-    tts: JSON.stringify({
-      model: '{model}',
-      input: '{text}',
-      voice: '{voice}',
-      response_format: 'mp3',
-      speed: '{speed}',
-    }, null, 2),
+    tts: `{
+  "model": "{model}",
+  "input": "{text}",
+  "voice": "{voice}",
+  "response_format": "mp3",
+  "speed": {speed}
+}`,
   },
   responseTextPath: 'text',
   responseAudioPath: '', // OpenAI TTS直接返回音频流
