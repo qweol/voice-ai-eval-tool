@@ -12,8 +12,12 @@ interface TTSResult {
   provider: string;
   audioUrl: string;
   duration: number;
+  ttfb?: number | null;
+  totalTime?: number;
   status: string;
   error?: string;
+  providerLatencyMs?: number;
+  providerDurationSec?: number;
 }
 
 interface ProviderVoice {
@@ -450,9 +454,12 @@ export default function TTSPage() {
                       {result.provider}
                     </h3>
                     <div className="flex items-center gap-4">
-                      <span className="text-sm text-gray-500">
-                        耗时: {result.duration.toFixed(2)}s
-                      </span>
+                      <div className="flex flex-col gap-1 text-sm text-gray-600">
+                        <div className="flex gap-3">
+                          <span>首token: {result.ttfb != null ? `${result.ttfb}ms` : '-'}</span>
+                          <span>总耗时: {result.totalTime != null ? `${result.totalTime}ms` : '-'}</span>
+                        </div>
+                      </div>
                       {result.status === 'success' ? (
                         <span className="text-green-600 font-semibold text-sm">✓ 成功</span>
                       ) : (

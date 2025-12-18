@@ -397,7 +397,8 @@ export async function callGenericTTS(
   options?: TTSOptions
 ): Promise<TTSResult> {
   const startTime = Date.now();
-  
+  let ttfb: number | null = null;
+
   try {
     // 0. 特殊处理：Minimax 使用 WebSocket，调用专用函数
     // 注意：只有当 protocol 明确为 'websocket' 时才使用 WebSocket
@@ -449,7 +450,12 @@ export async function callGenericTTS(
       language_type: languageType, // Qwen3-TTS 需要的语言类型
       format: 'mp3', // 默认格式
     };
-    
+
+    // Cartesia 特殊处理：添加 transcription_speed 参数
+    if (config.templateType === 'cartesia') {
+      variables.transcription_speed = variables.speed;
+    }
+
     // 2. 构建请求体
     let requestBody: any;
 
@@ -458,7 +464,7 @@ export async function callGenericTTS(
 
     if (config.requestBody) {
       let bodyTemplate = config.requestBody;
-      
+
       // 自动修复：如果使用 Qwen 模板但 requestBody 是旧格式，自动更新
       if (config.templateType === 'qwen' && bodyTemplate.includes('"input": "{text}"')) {
         console.warn('⚠️ 检测到旧的 Qwen 模板格式，自动更新为正确格式...');
@@ -466,7 +472,7 @@ export async function callGenericTTS(
         bodyTemplate = template.requestBodyTemplate.tts || bodyTemplate;
         console.log('✅ 已更新为新的模板格式');
       }
-      
+
       console.log('使用的请求体模板:', bodyTemplate);
       const bodyString = replaceVariables(bodyTemplate, variables);
       console.log('替换变量后:', bodyString);
@@ -606,18 +612,56 @@ export async function callGenericTTS(
       headers,
       body: JSON.stringify(requestBody),
     });
-
-    // 5. 处理响应
+    
+    // 读取响应流，并在首个chunk到达时记录TTFB
     let audioBuffer: Buffer;
-
-    // 检查Content-Type
     const contentType = response.headers.get('content-type') || '';
     console.log('响应 Content-Type:', contentType);
     console.log('响应状态:', response.status, response.statusText);
 
+    let responseBodyBuffer: Buffer | null = null;
+    let ttfbRecorded = false;
+
+    if (response.body && typeof response.body.getReader === 'function') {
+      const reader = response.body.getReader();
+      const chunks: Buffer[] = [];
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) {
+          if (!ttfbRecorded) {
+            ttfb = Date.now() - startTime;
+            ttfbRecorded = true;
+            console.log('TTFB (首字节耗时):', ttfb, 'ms');
+          }
+          chunks.push(Buffer.from(value));
+        }
+      }
+      responseBodyBuffer = Buffer.concat(chunks);
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      responseBodyBuffer = Buffer.from(arrayBuffer);
+    }
+
+    if (!ttfbRecorded) {
+      ttfb = Date.now() - startTime;
+      console.log('TTFB (首字节耗时 - fallback):', ttfb, 'ms');
+    }
+
+    if (!responseBodyBuffer) {
+      responseBodyBuffer = Buffer.alloc(0);
+    }
+
     if (contentType.includes('application/json')) {
       // JSON响应，需要从响应中提取音频
-      const responseData = await response.json();
+      const responseText = responseBodyBuffer.toString('utf-8');
+      let responseData: any = {};
+      try {
+        responseData = responseText ? JSON.parse(responseText) : {};
+      } catch (error: any) {
+        console.error('JSON 解析失败:', error.message);
+        throw new Error(`响应解析失败: ${error.message}`);
+      }
       console.log('响应数据（前500字符）:', JSON.stringify(responseData).substring(0, 500));
       
       // 检查 Minimax HTTP API 的错误响应格式
@@ -725,23 +769,27 @@ export async function callGenericTTS(
     } else {
       // 直接返回音频文件
       if (!response.ok) {
-        // 尝试读取错误信息
-        const errorText = await response.text();
+        const errorText = responseBodyBuffer.toString('utf-8') || `${response.status}`;
         console.error('API错误响应:', errorText);
         throw new Error(`API调用失败: ${response.statusText} - ${errorText}`);
       }
-      const arrayBuffer = await response.arrayBuffer();
-      audioBuffer = Buffer.from(arrayBuffer);
+      audioBuffer = responseBodyBuffer;
       console.log('音频数据大小:', audioBuffer.length, 'bytes');
     }
 
-    const duration = (Date.now() - startTime) / 1000;
+    const totalTime = Date.now() - startTime;
+    const duration = totalTime / 1000;
 
-    console.log('🎉 TTS 调用成功，准备返回结果，音频大小:', audioBuffer!.length, 'bytes');
+    console.log('🎉 TTS 调用成功，准备返回结果');
+    console.log('音频大小:', audioBuffer!.length, 'bytes');
+    console.log('总耗时:', totalTime, 'ms');
+    console.log('TTFB (首字节耗时):', ttfb, 'ms');
 
     return {
       audioBuffer,
       duration,
+      ttfb,
+      totalTime,
       format: 'mp3', // 默认格式，实际应该从响应或配置中获取
     };
   } catch (error: any) {
@@ -777,6 +825,8 @@ export async function callMinimaxTTS(
     const audioChunks: Buffer[] = [];
     let hasError = false;
     let timeoutId: NodeJS.Timeout | null = null;
+    let ttfbValue: number | null = null;
+    let firstChunkReceived = false;
 
     // 清理函数
     const cleanup = () => {
@@ -862,6 +912,11 @@ export async function callMinimaxTTS(
           if (response.data?.audio) {
             const audioChunk = Buffer.from(response.data.audio, 'base64');
             audioChunks.push(audioChunk);
+            if (!firstChunkReceived) {
+              ttfbValue = Date.now() - startTime;
+              firstChunkReceived = true;
+              console.log('TTFB (首块音频耗时):', ttfbValue, 'ms');
+            }
             console.log(`📦 接收音频块: ${audioChunk.length} bytes (总计: ${audioChunks.length} 块)`);
           }
         } else if (status === 3) {
@@ -872,14 +927,21 @@ export async function callMinimaxTTS(
 
           // 拼接所有音频 chunk
           const audioBuffer = Buffer.concat(audioChunks);
-          const duration = (Date.now() - startTime) / 1000;
+          const totalTime = Date.now() - startTime;
+          const duration = totalTime / 1000;
+          if (ttfbValue == null) {
+            ttfbValue = totalTime;
+          }
 
           console.log('🎉 音频拼接完成，总大小:', audioBuffer.length, 'bytes');
+          console.log('总耗时:', totalTime, 'ms');
 
           cleanup();
           resolve({
             audioBuffer,
             duration,
+            ttfb: ttfbValue,
+            totalTime,
             format: 'mp3',
           });
         }

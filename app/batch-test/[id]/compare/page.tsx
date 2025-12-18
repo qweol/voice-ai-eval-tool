@@ -253,9 +253,30 @@ export default function ComparePage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="grid grid-cols-3 gap-4 mt-4">
                 <div className="p-4 border rounded-lg">
-                  <div className="text-sm text-gray-600 mb-1">速度变化</div>
+                  <div className="text-sm text-gray-600 mb-1">TTFB变化</div>
+                  <div
+                    className={`text-2xl font-bold ${
+                      report.summary.ttfbChange < 0
+                        ? 'text-green-600'
+                        : report.summary.ttfbChange > 0
+                        ? 'text-red-600'
+                        : 'text-gray-600'
+                    }`}
+                  >
+                    {report.summary.ttfbChange != null ? (
+                      <>
+                        {report.summary.ttfbChange > 0 ? '+' : ''}
+                        {Number(report.summary.ttfbChange).toFixed(1)}%
+                      </>
+                    ) : (
+                      '-'
+                    )}
+                  </div>
+                </div>
+                <div className="p-4 border rounded-lg">
+                  <div className="text-sm text-gray-600 mb-1">总耗时变化</div>
                   <div
                     className={`text-2xl font-bold ${
                       report.summary.speedChange < 0
@@ -331,7 +352,16 @@ export default function ComparePage() {
                               {comparison.testCaseText}
                             </div>
                             <div className="text-xs text-gray-600">
-                              供应商: {comparison.provider} | 耗时变化:{' '}
+                              供应商: {comparison.provider} | TTFB变化:{' '}
+                              {comparison.ttfbChange != null ? (
+                                <>
+                                  {comparison.ttfbChange > 0 ? '+' : ''}
+                                  {Number(comparison.ttfbChange).toFixed(1)}%
+                                </>
+                              ) : (
+                                '-'
+                              )}{' '}
+                              | 总耗时变化:{' '}
                               {comparison.durationChange > 0 ? '+' : ''}
                               {Number(comparison.durationChange).toFixed(1)}% | 成本变化:{' '}
                               {comparison.costChange > 0 ? '+' : ''}

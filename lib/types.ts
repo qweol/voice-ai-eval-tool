@@ -13,7 +13,9 @@ export interface ASROptions {
 // TTS 相关类型
 export interface TTSResult {
   audioBuffer: Buffer;
-  duration: number;
+  duration: number; // 供应商 API 调用耗时（秒，不含后处理）
+  ttfb?: number | null; // 首个音频块耗时，毫秒
+  totalTime?: number; // 供应商 API 调用耗时（毫秒，不含后处理）
   format?: string;
 }
 

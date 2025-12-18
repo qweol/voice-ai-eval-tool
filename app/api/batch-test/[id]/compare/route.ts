@@ -93,6 +93,7 @@ function compareWithBaselines(currentBatch: any, baselines: any[]): any {
     totalImproved: 0,
     totalRegressed: 0,
     totalUnchanged: 0,
+    ttfbChange: 0,
     speedChange: 0,
     costChange: 0,
     successRateChange: 0,
@@ -128,6 +129,20 @@ function compareWithBaselines(currentBatch: any, baselines: any[]): any {
       baselineTotalCost > 0
         ? ((currentTotalCost - baselineTotalCost) / baselineTotalCost) * 100
         : 0;
+
+    // 计算平均 TTFB 变化
+    const currentResultsWithTtfb = currentBatch.results.filter((r: any) => r.ttfb != null);
+    const baselineResultsWithTtfb = baselineSnapshot.results?.filter((r: any) => r.ttfb != null) || [];
+
+    let ttfbChange = 0;
+    if (currentResultsWithTtfb.length > 0 && baselineResultsWithTtfb.length > 0) {
+      const currentAvgTtfb = currentResultsWithTtfb.reduce((sum: number, r: any) => sum + (r.ttfb || 0), 0) / currentResultsWithTtfb.length;
+      const baselineAvgTtfb = baselineResultsWithTtfb.reduce((sum: number, r: any) => sum + (r.ttfb || 0), 0) / baselineResultsWithTtfb.length;
+
+      if (baselineAvgTtfb > 0) {
+        ttfbChange = ((currentAvgTtfb - baselineAvgTtfb) / baselineAvgTtfb) * 100;
+      }
+    }
 
     // 对比每个测试用例
     const caseComparisons: any[] = [];
@@ -165,6 +180,12 @@ function compareWithBaselines(currentBatch: any, baselines: any[]): any {
           const costChangePercent =
             baselineCost > 0 ? ((currentCost - baselineCost) / baselineCost) * 100 : 0;
 
+          // 计算 TTFB 变化
+          let ttfbChange: number | null = null;
+          if (currentResult.ttfb != null && baselineResult.ttfb != null && baselineResult.ttfb > 0) {
+            ttfbChange = ((currentResult.ttfb - baselineResult.ttfb) / baselineResult.ttfb) * 100;
+          }
+
           // 判断改进/退化
           let status = 'unchanged';
           if (
@@ -196,6 +217,7 @@ function compareWithBaselines(currentBatch: any, baselines: any[]): any {
             status,
             currentStatus: currentResult.status,
             baselineStatus: baselineResult.status,
+            ttfbChange,
             durationChange,
             costChange: costChangePercent,
             currentDuration,
@@ -210,6 +232,7 @@ function compareWithBaselines(currentBatch: any, baselines: any[]): any {
     summary.totalImproved += improved;
     summary.totalRegressed += regressed;
     summary.totalUnchanged += unchanged;
+    summary.ttfbChange += ttfbChange;
     summary.speedChange += speedChange;
     summary.costChange += costChange;
     summary.successRateChange += successRateChange;
@@ -219,6 +242,7 @@ function compareWithBaselines(currentBatch: any, baselines: any[]): any {
       baselineName: baseline.name,
       baselineCreatedAt: baseline.createdAt,
       successRateChange,
+      ttfbChange,
       speedChange,
       costChange,
       improved,
@@ -231,6 +255,7 @@ function compareWithBaselines(currentBatch: any, baselines: any[]): any {
   // 计算平均值
   const baselineCount = baselines.length;
   if (baselineCount > 0) {
+    summary.ttfbChange /= baselineCount;
     summary.speedChange /= baselineCount;
     summary.costChange /= baselineCount;
     summary.successRateChange /= baselineCount;

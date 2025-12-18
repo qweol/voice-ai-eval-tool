@@ -43,6 +43,8 @@ interface TestResult {
   status: 'SUCCESS' | 'FAILED' | 'TIMEOUT';
   audioUrl?: string;
   duration?: number;
+  ttfb?: number | null;
+  totalTime?: number;
   cost?: number;
   error?: string;
   userRating?: any;
@@ -474,7 +476,7 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
                     <div className="font-medium text-gray-700">{result.provider}</div>
                     {result.status === 'SUCCESS' ? (
                       <div className="text-sm text-gray-600">
-                        耗时: {result.duration ? Number(result.duration).toFixed(2) : '0.00'}s | 成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
+                        首token: {result.ttfb != null ? `${result.ttfb}ms` : '-'} | 总耗时: {result.totalTime != null ? `${result.totalTime}ms` : '-'} | 成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
                       </div>
                     ) : (
                       <div className="text-sm text-red-600">{result.error}</div>

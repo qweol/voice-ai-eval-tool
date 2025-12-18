@@ -115,12 +115,13 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             console.log(`✅ 找到供应商: ${providerConfig.name}`);
 
             // 调用 TTS API
-            const startTime = Date.now();
+            const overallStart = Date.now();
             const result = await callGenericTTS(providerConfig, testCase.text, {
               speed,
               voice: testCase.expectedVoice || undefined,
             });
-            const totalTime = Date.now() - startTime;
+            const endToEndTime = Date.now() - overallStart;
+            const endToEndDurationSeconds = endToEndTime / 1000;
 
             // 保存音频文件
             const audioFileName = `${batchId}_${testCase.id}_${providerIdStr}_${Date.now()}.mp3`;
@@ -152,29 +153,35 @@ export async function executeBatchTest(batchId: string): Promise<void> {
                 provider: providerIdStr,
                 status: TestResultStatus.SUCCESS,
                 audioUrl,
-                duration: result.duration,
+                duration: endToEndDurationSeconds,
                 cost,
-                totalTime,
+                ttfb: result.ttfb,
+                totalTime: endToEndTime,
                 technicalParams: {
                   format: result.format || 'mp3',
                   fileSize: result.audioBuffer.length,
+                  providerLatencyMs: result.totalTime,
+                  providerDurationSeconds: result.duration,
                 },
               },
               update: {
                 status: TestResultStatus.SUCCESS,
                 audioUrl,
-                duration: result.duration,
+                duration: endToEndDurationSeconds,
                 cost,
-                totalTime,
+                ttfb: result.ttfb,
+                totalTime: endToEndTime,
                 technicalParams: {
                   format: result.format || 'mp3',
                   fileSize: result.audioBuffer.length,
+                  providerLatencyMs: result.totalTime,
+                  providerDurationSeconds: result.duration,
                 },
                 error: null,
               },
             });
 
-            totalDuration += result.duration;
+            totalDuration += endToEndDurationSeconds;
             totalCost += cost;
             success = true;
           } catch (error: any) {

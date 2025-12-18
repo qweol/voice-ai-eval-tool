@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
     const results = await Promise.allSettled(
       providerCalls.map(async (provider) => {
         try {
+          const overallStart = Date.now();
           const result = await provider.fn();
 
           // 保存音频文件
@@ -135,10 +136,16 @@ export async function POST(request: NextRequest) {
             await writeFile(filepath, Buffer.from([]));
           }
 
+          const endToEndTime = Date.now() - overallStart;
+
           return {
             provider: provider.name,
             audioUrl: `/api/storage/audio/${filename}`,
-            duration: result.duration,
+            duration: endToEndTime / 1000,
+            ttfb: result.ttfb,
+            totalTime: endToEndTime,
+            providerLatencyMs: result.totalTime,
+            providerDurationSec: result.duration,
             status: 'success',
           };
         } catch (error: any) {
