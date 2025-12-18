@@ -98,8 +98,17 @@ export async function POST(request: NextRequest) {
       (p) => p.serviceType === 'tts' || p.serviceType === 'both'
     );
 
+    // 根据前端选择的启用状态过滤供应商
+    // 只处理在 enabledProviderVoices 中存在且 enabled 为 true 的供应商
+    const enabledProviderIds = new Set(enabledProviderVoices.map(pv => pv.providerId));
+    const filteredTtsProviders = ttsProviders.filter(
+      (provider) => enabledProviderIds.has(provider.id)
+    );
+
+    console.log(`启用的供应商数量: ${filteredTtsProviders.length} / ${ttsProviders.length}`);
+
     // 构建提供者调用列表
-    const providerCalls = ttsProviders.map((provider) => {
+    const providerCalls = filteredTtsProviders.map((provider) => {
       const providerVoice = enabledProviderVoices.find((pv) => pv.providerId === provider.id);
       const voice = providerVoice?.voice || options?.voice || 'default';
       

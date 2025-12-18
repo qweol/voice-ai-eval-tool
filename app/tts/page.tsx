@@ -126,9 +126,8 @@ export default function TTSPage() {
         return pv;
       })
     );
-    setEnabledProviders((prev) =>
-      prev.filter((p) => p.id !== providerId)
-    );
+    // 移除错误的逻辑：不应该修改 enabledProviders，它只是用于显示列表
+    // enabled 状态由 providerVoices 中的 enabled 字段控制
   };
 
   const handleCompare = async () => {
@@ -273,7 +272,7 @@ export default function TTSPage() {
           <div className="flex items-center gap-4 mb-6">
             <button
               onClick={handleCompare}
-              disabled={!text.trim() || loading || enabledProviders.length === 0}
+              disabled={!text.trim() || loading || providerVoices.filter(pv => pv.enabled).length === 0}
               className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold
                 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed
                 transition-colors"
@@ -285,7 +284,7 @@ export default function TTSPage() {
               字数: {text.length}
             </div>
 
-            {enabledProviders.length === 0 && (
+            {providerVoices.filter(pv => pv.enabled).length === 0 && enabledProviders.length > 0 && (
               <Link
                 href="/settings"
                 className="text-sm text-blue-600 hover:text-blue-800 underline"
