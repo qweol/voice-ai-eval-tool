@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { GenericProviderConfig, ModelDefinition } from '@/lib/providers/generic/types';
+import { useState, useEffect } from 'react';
+import { GenericProviderConfig, ModelDefinition, VoiceDefinition } from '@/lib/providers/generic/types';
 import { getAllTemplates } from '@/lib/providers/generic/template-loader';
 
 interface ProviderCardProps {
@@ -27,6 +27,27 @@ export default function ProviderCard({
   const [models, setModels] = useState<ModelDefinition[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // 存储从 API 获取的 Minimax 音色列表
+  const [minimaxVoices, setMinimaxVoices] = useState<VoiceDefinition[]>([]);
+
+  // 对于 Minimax 供应商，自动加载音色列表
+  useEffect(() => {
+    if (provider.templateType === 'minimax' && expanded) {
+      const loadMinimaxVoices = async () => {
+        try {
+          const response = await fetch('/api/providers/minimax/voices');
+          const data = await response.json();
+          if (data.success && data.data && data.data.length > 0) {
+            setMinimaxVoices(data.data);
+            console.log(`✅ 成功加载 ${data.data.length} 个 Minimax 音色`);
+          }
+        } catch (error: any) {
+          console.error('❌ 加载 Minimax 音色列表失败:', error.message);
+        }
+      };
+      loadMinimaxVoices();
+    }
+  }, [provider.templateType, expanded]);
 
   const handleFetchModels = async () => {
     setLoadingModels(true);
@@ -235,40 +256,54 @@ export default function ProviderCard({
                           )}
                         </div>
                       </div>
-                      {model.type === 'tts' && model.voices && model.voices.length > 0 && (
-                        <div className="mt-2">
-                          <p className="text-xs text-gray-600 mb-1">音色 ({model.voices.length}种):</p>
-                          {isSelected && onUpdateVoice ? (
-                            <select
-                              value={provider.selectedVoice || model.voices[0].id}
-                              onChange={(e) => onUpdateVoice(provider.id, e.target.value)}
-                              className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              {model.voices.map((voice) => (
-                                <option key={voice.id} value={voice.id}>
-                                  {voice.name} {voice.description ? `- ${voice.description}` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {model.voices.slice(0, 5).map((voice) => (
-                                <span
-                                  key={voice.id}
-                                  className="px-2 py-0.5 bg-white text-xs rounded border border-gray-200"
-                                >
-                                  {voice.name}
-                                </span>
-                              ))}
-                              {model.voices.length > 5 && (
-                                <span className="px-2 py-0.5 text-xs text-gray-500">
-                                  +{model.voices.length - 5} 更多
-                                </span>
+                      {model.type === 'tts' && (() => {
+                        // 对于 Minimax，优先使用从 API 获取的音色列表
+                        const voices = provider.templateType === 'minimax' && minimaxVoices.length > 0
+                          ? minimaxVoices
+                          : model.voices || [];
+                        
+                        if (voices.length === 0) return null;
+                        
+                        return (
+                          <div className="mt-2">
+                            <p className="text-xs text-gray-600 mb-1">
+                              音色 ({voices.length}种)
+                              {provider.templateType === 'minimax' && minimaxVoices.length > 0 && (
+                                <span className="text-green-600 ml-1">(已从API加载)</span>
                               )}
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            </p>
+                            {isSelected && onUpdateVoice ? (
+                              <select
+                                value={provider.selectedVoice || voices[0].id}
+                                onChange={(e) => onUpdateVoice(provider.id, e.target.value)}
+                                className="w-full text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              >
+                                {voices.map((voice) => (
+                                  <option key={voice.id} value={voice.id}>
+                                    {voice.name} {voice.description ? `- ${voice.description}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {voices.slice(0, 5).map((voice) => (
+                                  <span
+                                    key={voice.id}
+                                    className="px-2 py-0.5 bg-white text-xs rounded border border-gray-200"
+                                  >
+                                    {voice.name}
+                                  </span>
+                                ))}
+                                {voices.length > 5 && (
+                                  <span className="px-2 py-0.5 text-xs text-gray-500">
+                                    +{voices.length - 5} 更多
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}

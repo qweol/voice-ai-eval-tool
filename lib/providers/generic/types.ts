@@ -7,7 +7,7 @@ export type AuthType = 'bearer' | 'apikey' | 'custom';
 export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'PATCH';
 
 // 内置模板类型（向后兼容）
-export type BuiltinTemplateType = 'openai' | 'qwen' | 'doubao' | 'cartesia' | 'custom';
+export type BuiltinTemplateType = 'openai' | 'qwen' | 'doubao' | 'cartesia' | 'minimax' | 'custom';
 
 // 模板ID可以是内置类型或自定义字符串
 export type TemplateType = BuiltinTemplateType | string;
@@ -53,12 +53,14 @@ export interface GenericProviderConfig {
   serviceType: 'asr' | 'tts' | 'both'; // 支持的服务类型
   
   // API配置
-  apiUrl: string; // API地址
+  apiUrl: string; // API地址（HTTP URL 或 WebSocket URL）
   method: HTTPMethod; // HTTP方法
+  protocol?: 'http' | 'websocket'; // 协议类型（Minimax 使用 websocket）
   
   // 认证配置
   authType: AuthType;
-  apiKey?: string; // API密钥
+  apiKey?: string; // API密钥（或 Minimax 的 token）
+  appId?: string; // AppID（Minimax 专用）
   authHeader?: string; // 自定义认证头，如 "Authorization: Bearer {api_key}"
   
   // 请求配置
@@ -68,7 +70,7 @@ export interface GenericProviderConfig {
   // 响应解析配置
   responseTextPath?: string; // ASR响应中文本的路径，如 "result.text" 或 "text"
   responseAudioPath?: string; // TTS响应中音频的路径，如 "result.audio" 或 "audio"
-  responseAudioFormat?: 'base64' | 'url' | 'binary' | 'stream'; // 音频格式
+  responseAudioFormat?: 'base64' | 'hex' | 'url' | 'binary' | 'stream'; // 音频格式（hex 用于 Minimax HTTP API）
   
   // 错误处理
   errorPath?: string; // 错误信息的路径，如 "error.message"

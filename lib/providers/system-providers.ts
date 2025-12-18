@@ -109,19 +109,113 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
+  // Minimax 预置配置
+  // 支持两种方式：
+  // 1. HTTP REST API（通过代理/中转站）：使用 MINIMAX_TTS_API_URL
+  // 2. WebSocket（官方）：使用 MINIMAX_APP_ID + MINIMAX_TOKEN
+  
+  // 方式1：HTTP REST API（代理方式）
+  if (process.env.MINIMAX_TTS_API_URL && process.env.MINIMAX_API_KEY) {
+    const minimaxTemplate = templates.minimax;
+    const modelId = process.env.MINIMAX_TTS_MODEL || 'speech-02-turbo';
+    const groupId = process.env.MINIMAX_GROUP_ID;
+
+    // 构建 HTTP 请求体模板
+    // 根据官方文档：https://platform.minimaxi.com/docs/api-reference/speech-t2a-http
+    // 使用 voice_setting 对象结构，而不是扁平结构
+    const httpRequestBody = JSON.stringify({
+      model: '{model}',
+      text: '{text}',
+      stream: false, // 非流式输出
+      voice_setting: {
+        voice_id: '{voice}',
+        speed: '{speed}', // 官方使用 speed，不是 speed_ratio
+        vol: 1, // 音量，默认 1
+        pitch: 0, // 音调，默认 0
+      },
+      // 注意：官方 API 没有 group_id 字段，如果代理 API 需要，可能需要通过其他方式传递
+      // 或者代理 API 的格式与官方不同
+      ...(groupId && { group_id: groupId.includes('"') ? groupId.replace(/"/g, '') : groupId }),
+    }, null, 2);
+
+    providers.push({
+      id: 'system-minimax-http',
+      name: 'Minimax HTTP（系统预置）',
+      type: 'generic',
+      serviceType: 'tts',
+      apiUrl: process.env.MINIMAX_TTS_API_URL,
+      method: 'POST',
+      authType: 'bearer', // 或 'apikey'，需要根据实际 API 调整
+      apiKey: process.env.MINIMAX_API_KEY,
+      protocol: 'http', // 使用 HTTP 协议
+      requestBody: httpRequestBody,
+      responseTextPath: undefined,
+      responseAudioPath: 'data.audio', // 官方文档：音频数据在 data.audio 中，是 hex 编码
+      responseAudioFormat: 'hex', // 官方使用 hex 编码，不是 base64
+      errorPath: 'base_resp.status_msg', // Minimax HTTP API 错误信息路径
+      templateType: 'minimax',
+      selectedModels: {
+        asr: undefined,
+        tts: modelId, // 使用环境变量中的模型，默认 speech-02-turbo
+      },
+      // 确保使用自定义模型，而不是模板默认值
+      customModels: {
+        tts: modelId,
+      },
+      selectedVoice: 'male-qn-qingse', // 使用官方文档示例中的音色 ID（speech-02-turbo 支持）
+      enabled: true,
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
+  // 方式2：WebSocket（官方方式）
+  if (process.env.MINIMAX_APP_ID && process.env.MINIMAX_TOKEN) {
+    const minimaxTemplate = templates.minimax;
+
+    providers.push({
+      id: 'system-minimax',
+      name: 'Minimax WebSocket（系统预置）',
+      type: 'generic',
+      serviceType: 'tts', // Minimax 仅支持 TTS
+      apiUrl: minimaxTemplate.defaultApiUrl,
+      method: minimaxTemplate.defaultMethod,
+      authType: minimaxTemplate.authType,
+      apiKey: process.env.MINIMAX_TOKEN, // Token
+      appId: process.env.MINIMAX_APP_ID, // AppID
+      protocol: 'websocket', // 使用 WebSocket 协议
+      requestBody: minimaxTemplate.requestBodyTemplate.tts, // 使用 TTS 模板
+      responseTextPath: minimaxTemplate.responseTextPath,
+      responseAudioPath: minimaxTemplate.responseAudioPath,
+      responseAudioFormat: minimaxTemplate.responseAudioFormat,
+      errorPath: minimaxTemplate.errorPath,
+      templateType: 'minimax',
+      selectedModels: {
+        asr: undefined, // Minimax 不支持 ASR
+        tts: minimaxTemplate.defaultModel?.tts,
+      },
+      selectedVoice: 'male-qn-qingse', // 默认使用已验证可用的音色（官方文档示例）
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
   return providers;
 }
 
 /**
- * 获取系统预置供应商（隐藏完整 API Key）
+ * 获取系统预置供应商（隐藏完整 API Key 和 AppID）
  * 用于前端显示
  */
-export function getSystemProvidersForDisplay(): Omit<GenericProviderConfig, 'apiKey'>[] {
+export function getSystemProvidersForDisplay(): Omit<GenericProviderConfig, 'apiKey' | 'appId'>[] {
   return getSystemProviders().map(provider => {
-    const { apiKey, ...rest } = provider;
+    const { apiKey, appId, ...rest } = provider;
     return {
       ...rest,
       apiKey: apiKey ? '***' : undefined, // 隐藏完整 Key
+      appId: appId ? '***' : undefined, // 隐藏完整 AppID
     };
   });
 }

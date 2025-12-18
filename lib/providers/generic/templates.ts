@@ -3,6 +3,7 @@
  */
 
 import { APITemplate, TemplateType, GenericProviderConfig, ModelDefinition, VoiceDefinition } from './types';
+import { getMinimaxVoices, getCachedVoices } from '../minimax-voices';
 
 /**
  * OpenAI TTS音色定义
@@ -407,6 +408,199 @@ export const cartesiaTemplate: APITemplate = {
 };
 
 /**
+ * 获取 Minimax 音色列表（动态）
+ * 优先使用缓存的音色列表，如果缓存无效则返回默认列表
+ * 前端可以通过 /api/providers/minimax/voices 端点查询最新音色列表
+ */
+export async function getMinimaxVoicesDynamic(): Promise<VoiceDefinition[]> {
+  // 尝试从缓存获取
+  const cached = getCachedVoices();
+  if (cached && cached.length > 0) {
+    return cached;
+  }
+  
+  // 如果缓存无效，尝试查询 API（异步，不阻塞）
+  const apiKey = process.env.MINIMAX_API_KEY;
+  if (apiKey) {
+    getMinimaxVoices(apiKey, false).catch(err => {
+      console.warn('⚠️ 异步查询 Minimax 音色失败:', err.message);
+    });
+  }
+  
+  // 返回默认音色列表
+  return getDefaultMinimaxVoices();
+}
+
+/**
+ * 获取默认 Minimax 音色列表（当 API 查询失败时使用）
+ */
+function getDefaultMinimaxVoices(): VoiceDefinition[] {
+  return [
+    {
+      id: 'male-qn-qingse',
+      name: '青涩（男声）',
+      description: '官方文档示例音色，已验证可用（speech-02-turbo 支持）',
+      gender: 'male',
+      language: 'zh'
+    },
+    {
+      id: 'female-qn-qingqing',
+      name: '清卿（女声）',
+      description: '清新甜美，适合儿童内容、绘本朗读',
+      gender: 'female',
+      language: 'zh'
+    },
+  ];
+}
+
+/**
+ * Minimax 音色定义（默认列表，用于模板初始化）
+ * 注意：实际可用音色应通过 /api/providers/minimax/voices 端点查询
+ * 参考：https://platform.minimaxi.com/docs/api-reference/voice-management-get
+ */
+const minimaxVoices: VoiceDefinition[] = [
+  {
+    id: 'male-qn-qingse',
+    name: '青涩（男声）',
+    description: '标准男声音色',
+    gender: 'male',
+    language: 'zh'
+  },
+  {
+    id: 'female-qn-qingqing',
+    name: '清卿（女声）',
+    description: '清新甜美，适合儿童内容、绘本朗读',
+    gender: 'female',
+    language: 'zh'
+  },
+  {
+    id: 'male-qn-qingqing',
+    name: '启明（男声）',
+    description: '温暖磁性，标准播音腔',
+    gender: 'male',
+    language: 'zh'
+  },
+  {
+    id: 'female-xiaoyu',
+    name: '小语（女声）',
+    description: '活泼可爱，二次元感强',
+    gender: 'female',
+    language: 'zh'
+  },
+  {
+    id: 'female-aisiyi',
+    name: '爱思忆（女声）',
+    description: '情感丰富，适合故事讲述',
+    gender: 'female',
+    language: 'zh'
+  },
+  {
+    id: 'female-beijing',
+    name: '北京妞儿（女声）',
+    description: '带京味儿口音，市井气息浓',
+    gender: 'female',
+    language: 'zh'
+  },
+  {
+    id: 'male-sichuan',
+    name: '川哥（男声）',
+    description: '四川话，幽默接地气',
+    gender: 'male',
+    language: 'zh'
+  },
+  {
+    id: 'female-guangdong',
+    name: '粤妹（女声）',
+    description: '粤语原生发音，可用于港澳地区应用',
+    gender: 'female',
+    language: 'zh'
+  },
+];
+
+/**
+ * Minimax 模型定义
+ * 注意：仅保留已验证可用的模型
+ */
+const minimaxModels: ModelDefinition[] = [
+  {
+    id: 'speech-02-turbo',
+    name: 'Minimax Speech 02 Turbo',
+    description: '拥有出色的韵律和稳定性，小语种能力加强，性能表现出色',
+    type: 'tts',
+    voices: minimaxVoices,
+    supportedFormats: ['mp3', 'wav', 'flac'],
+    speedRange: [0.5, 2.0],
+  },
+];
+
+/**
+ * Minimax 风格模板
+ * 适用于：Minimax TTS API
+ * 注意：
+ * - Minimax 使用 WebSocket 流式接口，需要特殊处理
+ * - 使用 appid + token 认证
+ * - 仅支持 TTS，不支持 ASR
+ * - 文本长度限制：≤ 300 字符
+ */
+export const minimaxTemplate: APITemplate = {
+  id: 'minimax',
+  name: 'Minimax风格',
+  description: '适用于 Minimax TTS API，使用 WebSocket 流式接口，高自然度中文语音合成',
+  defaultApiUrl: 'wss://api.minimaxi.com/v1/tts/stream',
+  defaultMethod: 'POST', // WebSocket 实际不使用，但保持类型兼容
+  authType: 'custom', // 使用 appid + token，非标准认证
+  isBuiltin: true,
+  requestBodyTemplate: {
+    // Minimax 不支持 ASR
+    asr: undefined,
+    // TTS 请求体模板（注意：这是 WebSocket 消息格式，不是 HTTP 请求体）
+    // 实际请求在 callMinimaxTTS 中构建
+    tts: JSON.stringify({
+      app: {
+        appid: '{appId}',
+        token: '{apiKey}',
+      },
+      user: {
+        uid: '{uid}',
+      },
+      content: {
+        text: '{text}',
+        model: '{model}', // 使用变量，支持所有模型
+        voice_setting: {
+          voice_id: '{voice}',
+          speed_ratio: '{speed}',
+          pitch_ratio: 1.0,
+          volume_ratio: 1.0,
+          encoding: 'mp3',
+          sample_rate: 24000,
+        },
+      },
+    }, null, 2),
+  },
+  responseTextPath: undefined, // Minimax 不支持 ASR
+  responseAudioPath: '', // WebSocket 流式响应，在 callMinimaxTTS 中处理
+  responseAudioFormat: 'stream',
+  errorPath: 'msg',
+  variables: [
+    { description: 'AppID（从控制台获取）', required: true, default: '' },
+    { description: 'Token（访问密钥）', required: true, default: '' },
+    { description: '音色ID', required: true, default: 'male-qn-qingse' },
+  ],
+
+  // 模型列表
+  models: minimaxModels,
+
+  // 不允许自定义模型（仅支持已验证的 speech-02-turbo）
+  allowCustomModel: false,
+
+  // 默认模型
+  defaultModel: {
+    asr: undefined, // 不支持 ASR
+    tts: 'speech-02-turbo', // 使用推荐的默认模型
+  },
+};
+
+/**
  * 自定义模板（完全自定义）
  */
 export const customTemplate: APITemplate = {
@@ -442,6 +636,7 @@ export const templates: Record<TemplateType, APITemplate> = {
   qwen: qwenTemplate,
   doubao: doubaoTemplate,
   cartesia: cartesiaTemplate,
+  minimax: minimaxTemplate,
   custom: customTemplate,
 };
 

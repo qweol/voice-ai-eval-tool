@@ -30,6 +30,8 @@ export default function TTSPage() {
   const [speed, setSpeed] = useState(1.0);
   const [providerVoices, setProviderVoices] = useState<ProviderVoice[]>([]);
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
+  // 存储每个 provider 的动态音色列表（从 API 获取）
+  const [providerVoicesMap, setProviderVoicesMap] = useState<Record<string, VoiceDefinition[]>>({});
 
   useEffect(() => {
     const config = getConfig();
@@ -71,6 +73,30 @@ export default function TTSPage() {
 
       setProviderVoices(voices);
       setEnabledProviders(ttsProviders);
+
+      // 对于 Minimax 供应商，从 API 获取可用音色列表
+      const minimaxProviders = ttsProviders.filter(p => p.templateType === 'minimax');
+      if (minimaxProviders.length > 0) {
+        const loadMinimaxVoices = async () => {
+          try {
+            const response = await fetch('/api/providers/minimax/voices');
+            const data = await response.json();
+            if (data.success && data.data && data.data.length > 0) {
+              const voicesMap: Record<string, VoiceDefinition[]> = {};
+              minimaxProviders.forEach(provider => {
+                voicesMap[provider.id] = data.data;
+              });
+              setProviderVoicesMap(prev => ({ ...prev, ...voicesMap }));
+              console.log(`✅ 成功加载 ${data.data.length} 个 Minimax 音色`);
+            } else {
+              console.warn('⚠️ Minimax 音色列表为空，使用默认音色');
+            }
+          } catch (error: any) {
+            console.error('❌ 加载 Minimax 音色列表失败:', error.message);
+          }
+        };
+        loadMinimaxVoices();
+      }
     };
 
     loadProviders();
@@ -301,6 +327,17 @@ export default function TTSPage() {
 
                 // 获取该Provider可用的音色列表
                 const getAvailableVoices = (): VoiceDefinition[] => {
+                  // 对于 Minimax，优先使用从 API 获取的音色列表
+                  if (provider.templateType === 'minimax') {
+                    const apiVoices = providerVoicesMap[provider.id];
+                    if (apiVoices && apiVoices.length > 0) {
+                      return apiVoices;
+                    }
+                    // 如果 API 查询失败，使用模板中的默认音色
+                    console.warn('⚠️ Minimax 音色列表未加载，使用模板默认音色');
+                  }
+
+                  // 其他供应商从模板获取
                   if (!provider.templateType) return [];
 
                   const template = templates[provider.templateType];

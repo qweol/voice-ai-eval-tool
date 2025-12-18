@@ -7,6 +7,7 @@ import { GenericProviderConfig, RequestVariables } from './types';
 import { ASRResult, TTSResult, ASROptions, TTSOptions } from '../../types';
 import { templates } from './templates';
 import { getTemplate } from './template-loader';
+import WebSocket from 'ws';
 
 /**
  * 获取要使用的模型ID
@@ -398,9 +399,30 @@ export async function callGenericTTS(
   const startTime = Date.now();
   
   try {
+    // 0. 特殊处理：Minimax 使用 WebSocket，调用专用函数
+    // 注意：只有当 protocol 明确为 'websocket' 时才使用 WebSocket
+    // 如果 protocol 为 'http' 或未设置，则使用标准 HTTP 调用
+    if (config.templateType === 'minimax' && config.protocol === 'websocket') {
+      console.log('🔄 检测到 Minimax 供应商（WebSocket），使用 WebSocket 调用器');
+      return await callMinimaxTTS(config, text, options);
+    }
+    
+    // 如果 protocol 是 'http' 或未设置，继续使用标准 HTTP 调用流程
+    if (config.templateType === 'minimax' && config.protocol !== 'websocket') {
+      console.log('🔄 检测到 Minimax 供应商（HTTP），使用 HTTP 调用器');
+    }
+
     // 1. 准备变量
     const modelId = getModelId(config, 'tts');
     const voiceId = getVoiceId(config, options?.voice);
+    
+    // 调试日志：检查模型获取
+    console.log('🔍 模型获取调试:', {
+      customModels: config.customModels,
+      selectedModels: config.selectedModels,
+      templateType: config.templateType,
+      finalModelId: modelId,
+    });
 
     // 根据语言代码生成 language_type（用于 Qwen3-TTS）
     const languageTypeMap: Record<string, string> = {
@@ -462,6 +484,89 @@ export async function callGenericTTS(
           console.log('✅ Cartesia: 测试使用 speed = 0.5 (原始值为', speedValue, ')');
         }
       }
+
+      // Minimax HTTP 特殊处理（根据官方文档格式）
+      if (config.templateType === 'minimax' && config.protocol === 'http') {
+        // 1. 处理 voice_setting 对象中的 speed（官方使用 speed，不是 speed_ratio）
+        if (requestBody.voice_setting && typeof requestBody.voice_setting === 'object') {
+          if (requestBody.voice_setting.speed !== undefined) {
+            const speedValue = typeof requestBody.voice_setting.speed === 'string' 
+              ? parseFloat(requestBody.voice_setting.speed)
+              : Number(requestBody.voice_setting.speed);
+            if (!isNaN(speedValue)) {
+              requestBody.voice_setting.speed = speedValue;
+              console.log('✅ Minimax HTTP: voice_setting.speed 转换为数字', speedValue);
+            }
+          }
+          // 确保 vol 和 pitch 是数字
+          if (requestBody.voice_setting.vol !== undefined) {
+            requestBody.voice_setting.vol = Number(requestBody.voice_setting.vol) || 1;
+          }
+          if (requestBody.voice_setting.pitch !== undefined) {
+            requestBody.voice_setting.pitch = Number(requestBody.voice_setting.pitch) || 0;
+          }
+        }
+        
+        // 2. 处理旧的扁平格式（向后兼容，如果模板还是旧格式）
+        if (requestBody.speed_ratio !== undefined && !requestBody.voice_setting) {
+          console.warn('⚠️ Minimax HTTP: 检测到旧格式（speed_ratio），建议使用 voice_setting 格式');
+          const speedValue = typeof requestBody.speed_ratio === 'string' 
+            ? parseFloat(requestBody.speed_ratio)
+            : Number(requestBody.speed_ratio);
+          if (!isNaN(speedValue)) {
+            // 转换为新格式
+            requestBody.voice_setting = {
+              voice_id: requestBody.voice_id || 'female-qn-qingqing',
+              speed: speedValue,
+              vol: 1,
+              pitch: 0,
+            };
+            delete requestBody.speed_ratio;
+            delete requestBody.voice_id;
+            console.log('✅ Minimax HTTP: 已转换为新格式（voice_setting）');
+          }
+        }
+        
+        // 3. 处理 group_id（保持字符串，避免精度丢失）
+        // 注意：大数字（如 1752252004131938307）转换为 Number 会丢失精度
+        // 如果代理 API 需要数字类型，可能需要通过其他方式传递
+        if (requestBody.group_id !== undefined && typeof requestBody.group_id === 'string') {
+          const cleanGroupId = requestBody.group_id.trim().replace(/^["']|["']$/g, '');
+          // 检查是否是很大的数字（超过 Number.MAX_SAFE_INTEGER）
+          const bigIntValue = BigInt(cleanGroupId);
+          if (bigIntValue > BigInt(Number.MAX_SAFE_INTEGER)) {
+            // 保持字符串，避免精度丢失
+            requestBody.group_id = cleanGroupId;
+            console.log('✅ Minimax HTTP: group_id 保持字符串（避免精度丢失）:', cleanGroupId);
+          } else {
+            // 小数字可以安全转换
+            const numValue = Number(cleanGroupId);
+            if (!isNaN(numValue)) {
+              requestBody.group_id = numValue;
+              console.log('✅ Minimax HTTP: group_id 转换为数字', numValue);
+            }
+          }
+        }
+        
+        // 4. 检查是否有空值字段
+        const emptyFields: string[] = [];
+        const checkEmpty = (obj: any, prefix = '') => {
+          for (const [key, value] of Object.entries(obj)) {
+            const fullKey = prefix ? `${prefix}.${key}` : key;
+            if (value === null || value === undefined || value === '') {
+              emptyFields.push(fullKey);
+            } else if (typeof value === 'object' && !Array.isArray(value)) {
+              checkEmpty(value, fullKey);
+            }
+          }
+        };
+        checkEmpty(requestBody);
+        if (emptyFields.length > 0) {
+          console.warn('⚠️ Minimax HTTP: 发现空值字段:', emptyFields);
+        }
+        
+        console.log('🔍 Minimax HTTP 最终请求体:', JSON.stringify(requestBody, null, 2));
+      }
     } else {
       // 如果没有模板，使用默认格式
       console.warn('⚠️ 警告: config.requestBody 为空，使用默认格式');
@@ -515,6 +620,16 @@ export async function callGenericTTS(
       const responseData = await response.json();
       console.log('响应数据（前500字符）:', JSON.stringify(responseData).substring(0, 500));
       
+      // 检查 Minimax HTTP API 的错误响应格式
+      if (config.templateType === 'minimax' && config.protocol === 'http') {
+        const baseResp = responseData.base_resp;
+        if (baseResp && baseResp.status_code !== 0 && baseResp.status_code !== 200) {
+          const errorMsg = baseResp.status_msg || `错误码: ${baseResp.status_code}`;
+          console.error('Minimax HTTP API 错误:', JSON.stringify(responseData, null, 2));
+          throw new Error(`Minimax API 调用失败: ${errorMsg}`);
+        }
+      }
+
       if (!response.ok) {
         console.error('API 调用失败，完整响应:', JSON.stringify(responseData, null, 2));
         const errorMessage = config.errorPath
@@ -582,6 +697,19 @@ export async function callGenericTTS(
             console.error('Base64 解码失败:', error);
             throw new Error(`Base64 解码失败: ${error}`);
           }
+        } else if (config.responseAudioFormat === 'hex') {
+          // Minimax HTTP API 使用 hex 编码（根据官方文档）
+          try {
+            // 移除可能的 0x 前缀和空格
+            const cleanHex = typeof audioData === 'string' 
+              ? audioData.replace(/^0x/i, '').replace(/\s/g, '')
+              : String(audioData).replace(/^0x/i, '').replace(/\s/g, '');
+            audioBuffer = Buffer.from(cleanHex, 'hex');
+            console.log('Hex 解码成功，音频大小:', audioBuffer.length, 'bytes');
+          } catch (error) {
+            console.error('Hex 解码失败:', error);
+            throw new Error(`Hex 解码失败: ${error}`);
+          }
         } else if (config.responseAudioFormat === 'url') {
           // 如果是URL，需要再次请求
           console.log('从 URL 获取音频:', audioData);
@@ -620,4 +748,165 @@ export async function callGenericTTS(
     console.error('❌ TTS 调用失败，错误:', error.message);
     throw new Error(`通用TTS API调用失败: ${error.message}`);
   }
+}
+
+/**
+ * 调用 Minimax TTS API（WebSocket 流式接口）
+ */
+export async function callMinimaxTTS(
+  config: GenericProviderConfig,
+  text: string,
+  options?: TTSOptions
+): Promise<TTSResult> {
+  const startTime = Date.now();
+  
+  return new Promise((resolve, reject) => {
+    // 检查必需字段
+    if (!config.appId || !config.apiKey) {
+      reject(new Error('Minimax 需要 appId 和 apiKey（token）'));
+      return;
+    }
+
+    // 限制文本长度
+    if (text.length > 300) {
+      console.warn(`⚠️ 文本长度超过 300 字符（${text.length}），将被截断`);
+      text = text.substring(0, 300);
+    }
+
+    const ws = new WebSocket(config.apiUrl);
+    const audioChunks: Buffer[] = [];
+    let hasError = false;
+    let timeoutId: NodeJS.Timeout | null = null;
+
+    // 清理函数
+    const cleanup = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+
+    // 超时控制（30秒）
+    timeoutId = setTimeout(() => {
+      if (!hasError) {
+        hasError = true;
+        cleanup();
+        reject(new Error('Minimax TTS 请求超时（30秒）'));
+      }
+    }, 30000);
+
+    // 连接建立
+    ws.on('open', () => {
+      try {
+        // 生成用户 ID
+        const uid = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        const request = {
+          app: {
+            appid: config.appId,
+            token: config.apiKey,
+          },
+          user: {
+            uid: uid,
+          },
+          content: {
+            text: text,
+            model: getModelId(config, 'tts') || 'speech-01-turbo', // 从配置获取模型，支持所有模型
+            voice_setting: {
+              voice_id: options?.voice || 'female-qn-qingqing', // 默认音色
+              speed_ratio: options?.speed || 1.0,
+              pitch_ratio: 1.0,
+              volume_ratio: 1.0,
+              encoding: 'mp3',
+              sample_rate: 24000,
+            },
+          },
+        };
+
+        console.log('=== Minimax WebSocket TTS 开始 ===');
+        console.log('音色:', request.content.voice_setting.voice_id);
+        console.log('语速:', request.content.voice_setting.speed_ratio);
+        console.log('文本长度:', text.length);
+
+        ws.send(JSON.stringify(request));
+      } catch (error: any) {
+        hasError = true;
+        cleanup();
+        reject(new Error(`发送请求失败: ${error.message}`));
+      }
+    });
+
+    // 接收消息
+    ws.on('message', (data: Buffer) => {
+      try {
+        const response = JSON.parse(data.toString());
+
+        // 检查错误码
+        if (response.code !== 0) {
+          hasError = true;
+          cleanup();
+          reject(new Error(`Minimax API 错误 [${response.code}]: ${response.msg || '未知错误'}`));
+          return;
+        }
+
+        const status = response.status;
+
+        if (status === 1) {
+          // 开始消息
+          console.log('✅ Minimax TTS 开始合成');
+        } else if (status === 2) {
+          // 音频数据块
+          if (response.data?.audio) {
+            const audioChunk = Buffer.from(response.data.audio, 'base64');
+            audioChunks.push(audioChunk);
+            console.log(`📦 接收音频块: ${audioChunk.length} bytes (总计: ${audioChunks.length} 块)`);
+          }
+        } else if (status === 3) {
+          // 结束消息
+          console.log('✅ Minimax TTS 合成完成');
+          console.log('总音频块数:', audioChunks.length);
+          console.log('API 返回时长:', response.data?.duration, 'ms');
+
+          // 拼接所有音频 chunk
+          const audioBuffer = Buffer.concat(audioChunks);
+          const duration = (Date.now() - startTime) / 1000;
+
+          console.log('🎉 音频拼接完成，总大小:', audioBuffer.length, 'bytes');
+
+          cleanup();
+          resolve({
+            audioBuffer,
+            duration,
+            format: 'mp3',
+          });
+        }
+      } catch (error: any) {
+        hasError = true;
+        cleanup();
+        reject(new Error(`解析响应失败: ${error.message}`));
+      }
+    });
+
+    // 错误处理
+    ws.on('error', (error) => {
+      if (!hasError) {
+        hasError = true;
+        cleanup();
+        reject(new Error(`WebSocket 连接错误: ${error.message}`));
+      }
+    });
+
+    // 连接关闭
+    ws.on('close', (code, reason) => {
+      if (!hasError && audioChunks.length === 0) {
+        // 如果没有收到任何数据就关闭了，视为错误
+        hasError = true;
+        cleanup();
+        reject(new Error(`WebSocket 连接异常关闭 [${code}]: ${reason || '无原因'}`));
+      }
+    });
+  });
 }

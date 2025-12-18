@@ -27,6 +27,7 @@ export default function CherryStyleProviderManager({
     method: 'POST',
     authType: 'bearer',
     apiKey: '',
+    appId: '', // Minimax 专用字段
     enabled: true,
     selectedModels: {},
   });
@@ -130,6 +131,9 @@ export default function CherryStyleProviderManager({
       method: formData.method || 'POST',
       authType: formData.authType || 'bearer',
       apiKey: formData.apiKey || '',
+      // Minimax 专用字段
+      appId: formData.appId || undefined,
+      protocol: formData.templateType === 'minimax' ? 'websocket' : undefined,
       requestBody: formData.requestBody,
       requestHeaders: formData.requestHeaders,
       responseTextPath: formData.responseTextPath,
@@ -158,6 +162,7 @@ export default function CherryStyleProviderManager({
       method: 'POST',
       authType: 'bearer',
       apiKey: '',
+      appId: '',
       enabled: true,
       selectedModels: {},
     });
@@ -234,6 +239,7 @@ export default function CherryStyleProviderManager({
               method: 'POST',
               authType: 'bearer',
               apiKey: '',
+              appId: '',
               enabled: true,
               selectedModels: {},
             });
@@ -305,10 +311,29 @@ export default function CherryStyleProviderManager({
                 type="password"
                 value={formData.apiKey || ''}
                 onChange={(e) => setFormData({ ...formData, apiKey: e.target.value })}
-                placeholder="sk-..."
+                placeholder={formData.templateType === 'minimax' ? 'Token (访问密钥)' : 'sk-...'}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
               />
             </div>
+
+            {/* Minimax 专用：AppID 输入框 */}
+            {formData.templateType === 'minimax' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  AppID * (Minimax 专用)
+                </label>
+                <input
+                  type="text"
+                  value={formData.appId || ''}
+                  onChange={(e) => setFormData({ ...formData, appId: e.target.value })}
+                  placeholder="app_xxxxxxxxxxxxxxx"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  从 Minimax 控制台获取 AppID
+                </p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
