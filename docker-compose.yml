@@ -1,43 +1,20 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: voice-ai-eval-postgres
+  mysql:
+    image: mysql:8.0
+    container_name: voice-ai-eval-mysql
     restart: unless-stopped
     environment:
-      POSTGRES_USER: voice_ai_user
-      POSTGRES_PASSWORD: voice_ai_password
-      POSTGRES_DB: voice_ai_eval
-      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+      MYSQL_ROOT_PASSWORD: voice_ai_root_password
+      MYSQL_DATABASE: voice_ai_eval
+      MYSQL_USER: voice_ai_user
+      MYSQL_PASSWORD: voice_ai_password
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U voice_ai_user -d voice_ai_eval"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - voice-ai-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: voice-ai-eval-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - voice-ai-network
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
 
   app:
     build:
@@ -45,31 +22,18 @@ services:
       dockerfile: Dockerfile
     container_name: voice-ai-eval-app
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    network_mode: "host"
     environment:
-      - DATABASE_URL=postgresql://voice_ai_user:voice_ai_password@postgres:5432/voice_ai_eval?schema=public
       - NODE_ENV=production
+      - PORT=3000
     env_file:
-      - .env.production
+      - .env.production.local
     volumes:
       - ./storage:/app/storage
       - ./public/audio:/app/public/audio
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - voice-ai-network
+      - mysql
     command: sh -c "npx prisma migrate deploy && node server.js"
 
 volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-
-networks:
-  voice-ai-network:
-    driver: bridge
+  mysql_data:
