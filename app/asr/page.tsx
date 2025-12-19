@@ -2,8 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { ArrowLeft, Upload, Play } from 'lucide-react';
 import { getConfig, getAllEnabledProvidersWithSystem } from '@/lib/utils/config';
 import { GenericProviderConfig } from '@/lib/providers/generic/types';
+import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 interface ASRResult {
   provider: string;
@@ -100,195 +103,201 @@ export default function ASRPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8">
+    <div className="min-h-screen bg-gray-50 relative overflow-hidden">
+      <div className="container mx-auto px-4 py-12 relative z-10">
         {/* 头部 */}
         <div className="mb-8">
-          <Link href="/" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-            ← 返回首页
+          <Link href="/" className="inline-flex items-center gap-2 text-accent hover:text-accent/80 mb-4 font-bold transition-colors">
+            <ArrowLeft size={18} strokeWidth={2.5} />
+            返回首页
           </Link>
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">
+          <h1 className="text-5xl font-heading font-extrabold text-foreground mb-3">
             ASR 语音识别对比
           </h1>
-          <p className="text-gray-600">
+          <p className="text-xl text-mutedForeground">
             上传音频文件，对比多个供应商的识别效果
           </p>
         </div>
 
         {/* 文件上传区域 */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">上传音频文件</h2>
+        <Card className="mb-8" hover={false}>
+          <CardHeader>
+            <h2 className="text-2xl font-heading font-bold">上传音频文件</h2>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-4 mb-4">
+              <input
+                type="file"
+                accept="audio/*"
+                onChange={handleFileChange}
+                className="block w-full text-sm text-mutedForeground
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded-full file:border-2 file:border-foreground
+                  file:text-sm file:font-bold
+                  file:bg-accent file:text-accentForeground
+                  hover:file:bg-accent/90 file:shadow-pop file:cursor-pointer"
+              />
+            </div>
 
-          <div className="flex items-center gap-4 mb-4">
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={handleFileChange}
-              className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-full file:border-0
-                file:text-sm file:font-semibold
-                file:bg-blue-50 file:text-blue-700
-                hover:file:bg-blue-100"
-            />
-          </div>
+            {file && (
+              <div className="mb-4 p-4 bg-muted rounded-lg border-2 border-border">
+                <p className="text-sm text-mutedForeground mb-2">
+                  已选择: <span className="font-bold text-foreground">{file.name}</span>
+                  <span className="ml-2">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+                </p>
+                {audioUrl && (
+                  <audio controls src={audioUrl} className="w-full mt-2" />
+                )}
+              </div>
+            )}
 
-          {file && (
-            <div className="mb-4 p-4 bg-gray-50 rounded">
-              <p className="text-sm text-gray-600">
-                已选择: <span className="font-semibold">{file.name}</span>
-                ({(file.size / 1024 / 1024).toFixed(2)} MB)
-              </p>
-              {audioUrl && (
-                <audio controls src={audioUrl} className="w-full mt-2" />
+            {/* 识别参数 */}
+            <div className="border-t-2 border-border pt-6 mb-6">
+              <h3 className="text-xl font-heading font-bold mb-4">识别参数</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
+                    语言
+                  </label>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
+                  >
+                    <option value="zh">中文</option>
+                    <option value="en">英文</option>
+                    <option value="zh-en">中英文混合</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
+                    音频格式
+                  </label>
+                  <select
+                    value={format}
+                    onChange={(e) => setFormat(e.target.value)}
+                    className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
+                  >
+                    <option value="wav">WAV</option>
+                    <option value="mp3">MP3</option>
+                    <option value="m4a">M4A</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* 供应商选择 */}
+            <div className="border-t-2 border-border pt-6 mb-6">
+              <h3 className="text-xl font-heading font-bold mb-4">选择供应商</h3>
+              <div className="space-y-3">
+                {enabledProviders.map((provider) => {
+                  return (
+                    <Card key={provider.id} featured={false} hover={false} className="mb-2">
+                      <label className="flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={true}
+                          onChange={() => toggleProvider(provider.id)}
+                          className="w-5 h-5 rounded border-2 border-foreground accent-accent cursor-pointer mr-3"
+                        />
+                        <span className="font-bold text-foreground">{provider.name}</span>
+                        <span className="ml-3 text-xs px-2 py-1 bg-accent text-accentForeground rounded-full font-bold">
+                          {provider.templateType || 'custom'}
+                        </span>
+                      </label>
+                    </Card>
+                  );
+                })}
+              </div>
+              {enabledProviders.length === 0 && (
+                <p className="text-sm text-mutedForeground mt-2">
+                  提示：请先在设置页面配置API密钥并启用供应商
+                </p>
               )}
             </div>
-          )}
 
-          {/* 识别参数 */}
-          <div className="border-t pt-4 mb-4">
-            <h3 className="text-lg font-semibold mb-4">识别参数</h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  语言
-                </label>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <div className="flex items-center gap-4 flex-wrap">
+              <Button
+                onClick={handleCompare}
+                disabled={!file || loading || enabledProviders.length === 0}
+                showArrow={true}
+              >
+                {loading ? '识别中...' : '开始识别'}
+              </Button>
+              {enabledProviders.length === 0 && (
+                <Link
+                  href="/settings"
+                  className="text-sm text-accent hover:text-accent/80 font-bold underline"
                 >
-                  <option value="zh">中文</option>
-                  <option value="en">英文</option>
-                  <option value="zh-en">中英文混合</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  音频格式
-                </label>
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="wav">WAV</option>
-                  <option value="mp3">MP3</option>
-                  <option value="m4a">M4A</option>
-                </select>
-              </div>
+                  请先配置API密钥
+                </Link>
+              )}
             </div>
-          </div>
-
-          {/* 供应商选择 */}
-          <div className="border-t pt-4 mb-4">
-            <h3 className="text-lg font-semibold mb-4">选择供应商</h3>
-            <div className="space-y-2">
-              {enabledProviders.map((provider) => {
-                return (
-                  <label key={provider.id} className="flex items-center cursor-pointer p-2 hover:bg-gray-50 rounded">
-                    <input
-                      type="checkbox"
-                      checked={true}
-                      onChange={() => toggleProvider(provider.id)}
-                      className="mr-2"
-                    />
-                    <span className="font-medium">{provider.name}</span>
-                    <span className="ml-2 text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                      {provider.templateType || 'custom'}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            {enabledProviders.length === 0 && (
-              <p className="text-sm text-gray-500 mt-2">
-                提示：请先在设置页面配置API密钥并启用供应商
-              </p>
-            )}
-          </div>
-
-          <button
-            onClick={handleCompare}
-            disabled={!file || loading || enabledProviders.length === 0}
-            className="bg-blue-600 text-white px-8 py-3 rounded-lg font-semibold
-              hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed
-              transition-colors"
-          >
-            {loading ? '识别中...' : '开始识别'}
-          </button>
-          {enabledProviders.length === 0 && (
-            <Link
-              href="/settings"
-              className="ml-4 text-sm text-blue-600 hover:text-blue-800 underline"
-            >
-              请先配置API密钥
-            </Link>
-          )}
-        </div>
+          </CardContent>
+        </Card>
 
         {/* 加载状态 */}
         {loading && (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-gray-600">正在调用各供应商 API 进行识别...</p>
-          </div>
+          <Card className="text-center" hover={false}>
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-accent border-t-transparent mb-4"></div>
+            <p className="text-mutedForeground font-medium">正在调用各供应商 API 进行识别...</p>
+          </Card>
         )}
 
         {/* 结果展示 */}
         {results.length > 0 && !loading && (
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold mb-4">识别结果对比</h2>
+          <Card hover={false}>
+            <h2 className="text-2xl font-heading font-bold mb-6">识别结果对比</h2>
 
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold">
+                  <tr className="bg-muted">
+                    <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
                       供应商
                     </th>
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold">
+                    <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
                       识别文本
                     </th>
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold">
+                    <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
                       耗时(秒)
                     </th>
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold">
+                    <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
                       置信度
                     </th>
-                    <th className="border border-gray-300 px-4 py-3 text-left font-semibold">
+                    <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
                       状态
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {results.map((result, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-4 py-3 font-medium">
+                    <tr key={i} className="hover:bg-muted/50 transition-colors">
+                      <td className="border-2 border-border px-4 py-3 font-bold text-foreground">
                         {result.provider}
                       </td>
-                      <td className="border border-gray-300 px-4 py-3">
+                      <td className="border-2 border-border px-4 py-3">
                         {result.status === 'success' ? (
-                          <span className="text-gray-800">{result.text}</span>
+                          <span className="text-foreground">{result.text}</span>
                         ) : (
-                          <span className="text-red-500">{result.error || '识别失败'}</span>
+                          <span className="text-red-600 font-medium">{result.error || '识别失败'}</span>
                         )}
                       </td>
-                      <td className="border border-gray-300 px-4 py-3">
+                      <td className="border-2 border-border px-4 py-3 text-mutedForeground font-medium">
                         {result.duration.toFixed(2)}
                       </td>
-                      <td className="border border-gray-300 px-4 py-3">
+                      <td className="border-2 border-border px-4 py-3 text-mutedForeground font-medium">
                         {result.status === 'success' && result.confidence !== undefined ? (
-                          <span className="text-gray-600">{(result.confidence * 100).toFixed(1)}%</span>
+                          <span className="text-foreground font-bold">{(result.confidence * 100).toFixed(1)}%</span>
                         ) : (
-                          <span className="text-gray-400">-</span>
+                          <span className="text-mutedForeground">-</span>
                         )}
                       </td>
-                      <td className="border border-gray-300 px-4 py-3">
+                      <td className="border-2 border-border px-4 py-3">
                         {result.status === 'success' ? (
-                          <span className="text-green-600 font-semibold">✓ 成功</span>
+                          <span className="px-3 py-1 bg-quaternary text-white rounded-full font-bold text-sm">✓ 成功</span>
                         ) : (
-                          <span className="text-red-600 font-semibold">✗ 失败</span>
+                          <span className="px-3 py-1 bg-red-500 text-white rounded-full font-bold text-sm">✗ 失败</span>
                         )}
                       </td>
                     </tr>
@@ -299,19 +308,19 @@ export default function ASRPage() {
 
             {/* 文本对比 */}
             <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-3">文本对比</h3>
-              <div className="space-y-2">
+              <h3 className="text-xl font-heading font-bold mb-4">文本对比</h3>
+              <div className="space-y-3">
                 {results
                   .filter(r => r.status === 'success')
                   .map((result, i) => (
-                    <div key={i} className="p-3 bg-gray-50 rounded">
-                      <span className="font-semibold text-gray-700">{result.provider}:</span>{' '}
-                      <span className="text-gray-800">{result.text}</span>
-                    </div>
+                    <Card key={i} featured={false} hover={false} className="mb-2">
+                      <span className="font-bold text-accent">{result.provider}:</span>{' '}
+                      <span className="text-foreground">{result.text}</span>
+                    </Card>
                   ))}
               </div>
             </div>
-          </div>
+          </Card>
         )}
       </div>
     </div>

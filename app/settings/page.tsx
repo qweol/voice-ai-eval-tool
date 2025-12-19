@@ -2,11 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { ArrowLeft, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { getConfig, saveConfig, resetConfig, getAllProvidersWithSystem, type AppConfig } from '@/lib/utils/config';
 import { GenericProviderConfig } from '@/lib/providers/generic/types';
 import CherryStyleProviderManager from './CherryStyleProviderManager';
 import TemplateManager from './TemplateManager';
 import ModelPlaza from './ModelPlaza';
+import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -61,34 +64,42 @@ export default function SettingsPage() {
   if (!config) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">加载中...</div>
+        <div className="text-mutedForeground font-medium">加载中...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="min-h-screen bg-gray-50 relative overflow-hidden">
+      
+      <div className="container mx-auto px-4 py-12 max-w-6xl relative z-10">
         {/* 头部 */}
         <div className="mb-8">
-          <Link href="/" className="text-blue-600 hover:text-blue-800 mb-4 inline-block">
-            ← 返回首页
+          <Link href="/" className="inline-flex items-center gap-2 text-accent hover:text-accent/80 mb-4 font-bold transition-colors">
+            <ArrowLeft size={18} strokeWidth={2.5} />
+            返回首页
           </Link>
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">设置</h1>
-          <p className="text-gray-600">配置API密钥和偏好设置</p>
+          <h1 className="text-5xl font-heading font-extrabold text-foreground mb-3">设置</h1>
+          <p className="text-xl text-mutedForeground">配置API密钥和偏好设置</p>
         </div>
 
         {/* 保存提示 */}
         {saved && (
-          <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
-            ✓ 配置已保存
-          </div>
+          <Card featured={false} hover={false} className="mb-6 bg-quaternary/10 border-quaternary">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 size={20} strokeWidth={2.5} className="text-quaternary" />
+              <span className="font-bold text-foreground">配置已保存</span>
+            </div>
+          </Card>
         )}
 
         {error && (
-          <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
-            ✗ {error}
-          </div>
+          <Card featured={false} hover={false} className="mb-6 bg-red-50 border-red-500">
+            <div className="flex items-center gap-3">
+              <XCircle size={20} strokeWidth={2.5} className="text-red-600" />
+              <span className="font-bold text-red-600">{error}</span>
+            </div>
+          </Card>
         )}
 
         {/* 模型服务管理 - Cherry Studio风格 */}
@@ -108,100 +119,107 @@ export default function SettingsPage() {
         </div>
 
         {/* TTS 默认设置 */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4">TTS 默认设置</h2>
-          <div className="max-w-md">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                默认语速: {config.tts.defaultSpeed.toFixed(1)}x
-              </label>
-              <input
-                type="range"
-                min="0.5"
-                max="2.0"
-                step="0.1"
-                value={config.tts.defaultSpeed}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    tts: { ...config.tts, defaultSpeed: parseFloat(e.target.value) },
-                  })
-                }
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>0.5x</span>
-                <span>2.0x</span>
+        <Card className="mb-6">
+          <CardHeader>
+            <h2 className="text-2xl font-heading font-bold">TTS 默认设置</h2>
+          </CardHeader>
+          <CardContent>
+            <div className="max-w-md">
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-3">
+                  默认语速: <span className="text-accent">{config.tts.defaultSpeed.toFixed(1)}x</span>
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.0"
+                  step="0.1"
+                  value={config.tts.defaultSpeed}
+                  onChange={(e) =>
+                    setConfig({
+                      ...config,
+                      tts: { ...config.tts, defaultSpeed: parseFloat(e.target.value) },
+                    })
+                  }
+                  className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-accent"
+                />
+                <div className="flex justify-between text-xs text-mutedForeground mt-2 font-medium">
+                  <span>0.5x</span>
+                  <span>2.0x</span>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* ASR 默认设置 */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-2xl font-semibold mb-4">ASR 默认设置</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                默认语言
-              </label>
-              <select
-                value={config.asr.defaultLanguage}
-                onChange={(e) =>
-                  setConfig({ ...config, asr: { ...config.asr, defaultLanguage: e.target.value } })
-                }
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="zh">中文</option>
-                <option value="en">英文</option>
-                <option value="zh-en">中英文混合</option>
-              </select>
+        <Card className="mb-6">
+          <CardHeader>
+            <h2 className="text-2xl font-heading font-bold">ASR 默认设置</h2>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
+                  默认语言
+                </label>
+                <select
+                  value={config.asr.defaultLanguage}
+                  onChange={(e) =>
+                    setConfig({ ...config, asr: { ...config.asr, defaultLanguage: e.target.value } })
+                  }
+                  className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
+                >
+                  <option value="zh">中文</option>
+                  <option value="en">英文</option>
+                  <option value="zh-en">中英文混合</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
+                  默认格式
+                </label>
+                <select
+                  value={config.asr.defaultFormat}
+                  onChange={(e) =>
+                    setConfig({ ...config, asr: { ...config.asr, defaultFormat: e.target.value } })
+                  }
+                  className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
+                >
+                  <option value="wav">WAV</option>
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                默认格式
-              </label>
-              <select
-                value={config.asr.defaultFormat}
-                onChange={(e) =>
-                  setConfig({ ...config, asr: { ...config.asr, defaultFormat: e.target.value } })
-                }
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="wav">WAV</option>
-                <option value="mp3">MP3</option>
-                <option value="m4a">M4A</option>
-              </select>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         {/* 操作按钮 */}
-        <div className="flex gap-4">
-          <button
-            onClick={handleSave}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors"
-          >
+        <div className="flex gap-4 mb-6">
+          <Button onClick={handleSave} showArrow={false}>
             保存配置
-          </button>
-          <button
-            onClick={handleReset}
-            className="bg-gray-300 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-400 transition-colors"
-          >
+          </Button>
+          <Button onClick={handleReset} variant="secondary" showArrow={false}>
             重置为默认值
-          </button>
+          </Button>
         </div>
 
         {/* 提示信息 */}
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <h3 className="font-semibold text-yellow-800 mb-2">⚠️ 安全提示</h3>
-          <ul className="text-sm text-yellow-700 space-y-1 list-disc list-inside">
-            <li>API密钥仅存储在浏览器本地（localStorage），不会上传到服务器</li>
-            <li>请妥善保管你的API密钥，不要分享给他人</li>
-            <li>建议定期更换API密钥以提高安全性</li>
-            <li>清除浏览器数据会删除所有已保存的配置</li>
-          </ul>
-        </div>
+        <Card featured={false} hover={false} className="bg-tertiary/10 border-tertiary">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={20} strokeWidth={2.5} className="text-tertiary mt-0.5" />
+            <div>
+              <h3 className="font-heading font-bold text-foreground mb-2">安全提示</h3>
+              <ul className="text-sm text-mutedForeground space-y-1 list-disc list-inside">
+                <li>API密钥仅存储在浏览器本地（localStorage），不会上传到服务器</li>
+                <li>请妥善保管你的API密钥，不要分享给他人</li>
+                <li>建议定期更换API密钥以提高安全性</li>
+                <li>清除浏览器数据会删除所有已保存的配置</li>
+              </ul>
+            </div>
+          </div>
+        </Card>
       </div>
     </div>
   );
