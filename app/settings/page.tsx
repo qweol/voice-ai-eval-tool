@@ -119,7 +119,7 @@ export default function SettingsPage() {
         </div>
 
         {/* TTS 默认设置 */}
-        <Card className="mb-6">
+        <Card featured={false} hover={false} className="mb-6">
           <CardHeader>
             <h2 className="text-2xl font-heading font-bold">TTS 默认设置</h2>
           </CardHeader>
@@ -153,7 +153,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* ASR 默认设置 */}
-        <Card className="mb-6">
+        <Card featured={false} hover={false} className="mb-6">
           <CardHeader>
             <h2 className="text-2xl font-heading font-bold">ASR 默认设置</h2>
           </CardHeader>
