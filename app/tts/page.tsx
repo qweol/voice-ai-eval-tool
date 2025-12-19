@@ -22,6 +22,19 @@ interface TTSResult {
   error?: string;
   providerLatencyMs?: number;
   providerDurationSec?: number;
+  cost?: number;
+  pricing?: {
+    ruleId?: string;
+    unit?: string;
+    usageAmount?: number;
+    originalAmount?: number;
+    originalCurrency?: string;
+    isEstimated?: boolean;
+    exchangeRate?: number;
+    notes?: string;
+    meta?: any;
+    warning?: string;
+  };
 }
 
 interface ProviderVoice {
@@ -461,9 +474,24 @@ export default function TTSPage() {
                     </h3>
                     <div className="flex items-center gap-4 flex-wrap">
                       <div className="flex flex-col gap-1 text-sm text-mutedForeground">
-                        <div className="flex gap-4">
+                        <div className="flex gap-4 flex-wrap">
                           <span className="font-medium">首token: <span className="text-foreground font-bold">{result.ttfb != null ? `${result.ttfb}ms` : '-'}</span></span>
                           <span className="font-medium">总耗时: <span className="text-foreground font-bold">{result.totalTime != null ? `${result.totalTime}ms` : '-'}</span></span>
+                          {result.cost !== undefined && result.cost !== null && (
+                            <span className="font-medium">
+                              成本: <span className="text-foreground font-bold">
+                                ${result.cost.toFixed(4)}
+                                {result.pricing?.isEstimated && (
+                                  <span className="text-xs text-yellow-600 ml-1" title="估算值">(估算)</span>
+                                )}
+                                {result.pricing?.originalCurrency && result.pricing.originalCurrency !== 'USD' && (
+                                  <span className="text-xs text-mutedForeground ml-1">
+                                    ({result.pricing.originalCurrency} {result.pricing.originalAmount?.toFixed(4)})
+                                  </span>
+                                )}
+                              </span>
+                            </span>
+                          )}
                         </div>
                       </div>
                       {result.status === 'success' ? (
@@ -509,7 +537,7 @@ export default function TTSPage() {
             {/* 统计信息 */}
             <Card featured={false} hover={false} className="mt-6 bg-accent/10 border-accent">
               <h3 className="font-heading font-bold text-foreground mb-4">统计信息</h3>
-              <div className="grid grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
                   <span className="text-mutedForeground">总供应商数:</span>{' '}
                   <span className="font-bold text-foreground">{results.length}</span>
@@ -524,6 +552,18 @@ export default function TTSPage() {
                   <span className="text-mutedForeground">失败:</span>{' '}
                   <span className="font-bold text-red-600">
                     {results.filter(r => r.status === 'failed').length}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-mutedForeground">总成本:</span>{' '}
+                  <span className="font-bold text-foreground">
+                    ${results
+                      .filter(r => r.status === 'success' && r.cost !== undefined && r.cost !== null)
+                      .reduce((sum, r) => sum + (r.cost || 0), 0)
+                      .toFixed(4)}
+                    {results.some(r => r.pricing?.isEstimated) && (
+                      <span className="text-xs text-yellow-600 ml-1" title="部分为估算值">(估算)</span>
+                    )}
                   </span>
                 </div>
               </div>

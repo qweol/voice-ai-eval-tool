@@ -17,6 +17,8 @@ export interface TTSResult {
   ttfb?: number | null; // 首个音频块耗时，毫秒
   totalTime?: number; // 供应商 API 调用耗时（毫秒，不含后处理）
   format?: string;
+  modelId?: string;
+  characterCount?: number;
 }
 
 export interface TTSOptions {

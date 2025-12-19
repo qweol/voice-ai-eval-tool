@@ -398,6 +398,8 @@ export async function callGenericTTS(
 ): Promise<TTSResult> {
   const startTime = Date.now();
   let ttfb: number | null = null;
+  const modelId = getModelId(config, 'tts');
+  const characterCount = text.length;
 
   try {
     // 0. 特殊处理：Minimax 使用 WebSocket，调用专用函数
@@ -414,7 +416,6 @@ export async function callGenericTTS(
     }
 
     // 1. 准备变量
-    const modelId = getModelId(config, 'tts');
     const voiceId = getVoiceId(config, options?.voice);
     
     // 调试日志：检查模型获取
@@ -791,6 +792,8 @@ export async function callGenericTTS(
       ttfb,
       totalTime,
       format: 'mp3', // 默认格式，实际应该从响应或配置中获取
+      modelId,
+      characterCount,
     };
   } catch (error: any) {
     console.error('❌ TTS 调用失败，错误:', error.message);
@@ -807,6 +810,8 @@ export async function callMinimaxTTS(
   options?: TTSOptions
 ): Promise<TTSResult> {
   const startTime = Date.now();
+  const modelId = getModelId(config, 'tts');
+  const originalCharacterCount = text.length;
   
   return new Promise((resolve, reject) => {
     // 检查必需字段
@@ -943,6 +948,8 @@ export async function callMinimaxTTS(
             ttfb: ttfbValue,
             totalTime,
             format: 'mp3',
+            modelId,
+            characterCount: Math.min(originalCharacterCount, 300),
           });
         }
       } catch (error: any) {

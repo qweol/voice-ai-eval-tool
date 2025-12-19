@@ -8,6 +8,7 @@ import { callGenericTTS } from '@/lib/providers/generic/caller';
 import { getSystemProviders } from '@/lib/providers/system-providers';
 import { promises as fs } from 'fs';
 import path from 'path';
+import { calculateTtsCost } from '@/lib/cost/calculator';
 
 // 导入枚举类型
 enum BatchTestStatus {
@@ -135,8 +136,35 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             // 使用 API 路由访问音频文件
             const audioUrl = `/api/storage/audio/${audioFileName}`;
 
-            // 计算成本（简化版，实际应该根据供应商定价）
-            const cost = calculateCost(testCase.text.length, providerIdStr);
+            const pricingInfo = calculateTtsCost({
+              providerId: providerIdStr,
+              templateType: providerConfig.templateType,
+              modelId: result.modelId,
+              textLength: testCase.text.length,
+            });
+
+            if (!pricingInfo) {
+              console.warn(
+                `⚠️ 未找到供应商 ${providerIdStr} 的定价规则，模型: ${result.modelId}, 模板: ${providerConfig.templateType}`
+              );
+            }
+
+            const cost = pricingInfo?.amountUsd ?? 0;
+            const pricingMetadata = pricingInfo
+              ? {
+                  ruleId: pricingInfo.ruleId,
+                  unit: pricingInfo.unit,
+                  usageAmount: pricingInfo.usageAmount,
+                  originalAmount: pricingInfo.originalAmount,
+                  originalCurrency: pricingInfo.originalCurrency,
+                  isEstimated: pricingInfo.isEstimated,
+                  exchangeRate: pricingInfo.exchangeRate,
+                  notes: pricingInfo.notes,
+                  meta: pricingInfo.meta,
+                }
+              : {
+                  warning: 'pricing_rule_not_found',
+                };
 
             // 保存测试结果
             await prisma.batchTestResult.upsert({
@@ -162,6 +190,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
                   fileSize: result.audioBuffer.length,
                   providerLatencyMs: result.totalTime,
                   providerDurationSeconds: result.duration,
+                  pricing: pricingMetadata,
                 },
               },
               update: {
@@ -176,6 +205,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
                   fileSize: result.audioBuffer.length,
                   providerLatencyMs: result.totalTime,
                   providerDurationSeconds: result.duration,
+                  pricing: pricingMetadata,
                 },
                 error: null,
               },
@@ -266,12 +296,3 @@ export async function executeBatchTest(batchId: string): Promise<void> {
   }
 }
 
-/**
- * 计算成本（简化版）
- * 实际应该根据供应商的定价策略计算
- */
-function calculateCost(textLength: number, _providerId: string): number {
-  // 简化计算：每1000字符 $0.015
-  const baseRate = 0.015;
-  return (textLength / 1000) * baseRate;
-}

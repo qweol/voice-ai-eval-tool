@@ -5,6 +5,7 @@ import path from 'path';
 import { TTSOptions } from '@/lib/types';
 import { GenericProviderConfig } from '@/lib/providers/generic/types';
 import { getSystemProviders } from '@/lib/providers/system-providers';
+import { calculateTtsCost } from '@/lib/cost/calculator';
 
 interface ProviderVoice {
   providerId: string;
@@ -120,19 +121,21 @@ export async function POST(request: NextRequest) {
       return {
         name: provider.name,
         id: provider.id,
+        templateType: provider.templateType,
+        providerConfig: provider, // 保存完整的 provider 配置
         fn: () => callGenericTTS(provider, text, ttsOptions),
       };
     });
 
     // 使用 Promise.allSettled 确保即使某个供应商失败也不影响其他
     const results = await Promise.allSettled(
-      providerCalls.map(async (provider) => {
+      providerCalls.map(async (providerCall) => {
         try {
           const overallStart = Date.now();
-          const result = await provider.fn();
+          const result = await providerCall.fn();
 
           // 保存音频文件
-          const filename = `${provider.id}_${Date.now()}.mp3`;
+          const filename = `${providerCall.id}_${Date.now()}.mp3`;
           const filepath = path.join(audioDir, filename);
 
           // 如果有真实的音频数据，保存到文件
@@ -141,26 +144,51 @@ export async function POST(request: NextRequest) {
           } else {
             // 如果是模拟数据（空 buffer），创建一个占位文件
             // 实际使用时应该有真实的音频数据
-            console.warn(`${provider.name} 返回空音频数据，创建占位文件`);
+            console.warn(`${providerCall.name} 返回空音频数据，创建占位文件`);
             await writeFile(filepath, Buffer.from([]));
           }
 
           const endToEndTime = Date.now() - overallStart;
 
+          // 计算成本
+          const pricingInfo = calculateTtsCost({
+            providerId: providerCall.id,
+            templateType: providerCall.templateType,
+            modelId: result.modelId,
+            textLength: text.length,
+          });
+
+          const cost = pricingInfo?.amountUsd ?? 0;
+          const pricingMetadata = pricingInfo
+            ? {
+                ruleId: pricingInfo.ruleId,
+                unit: pricingInfo.unit,
+                usageAmount: pricingInfo.usageAmount,
+                originalAmount: pricingInfo.originalAmount,
+                originalCurrency: pricingInfo.originalCurrency,
+                isEstimated: pricingInfo.isEstimated,
+                exchangeRate: pricingInfo.exchangeRate,
+                notes: pricingInfo.notes,
+                meta: pricingInfo.meta,
+              }
+            : { warning: 'pricing_rule_not_found' };
+
           return {
-            provider: provider.name,
+            provider: providerCall.name,
             audioUrl: `/api/storage/audio/${filename}`,
             duration: endToEndTime / 1000,
             ttfb: result.ttfb,
             totalTime: endToEndTime,
             providerLatencyMs: result.totalTime,
             providerDurationSec: result.duration,
+            cost,
+            pricing: pricingMetadata,
             status: 'success',
           };
         } catch (error: any) {
-          console.error(`${provider.name} 合成失败:`, error.message);
+          console.error(`${providerCall.name} 合成失败:`, error.message);
           return {
-            provider: provider.name,
+            provider: providerCall.name,
             audioUrl: '',
             duration: 0,
             status: 'failed',
