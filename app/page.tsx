@@ -32,7 +32,7 @@ export default function Home() {
                   </span>
                 }
               >
-                ASR 语音识别
+                    ASR 语音识别
               </CardHeader>
               <CardContent className="text-lg mb-6">
                 上传音频文件，对比多个供应商的识别效果
@@ -54,7 +54,7 @@ export default function Home() {
                   </span>
                 }
               >
-                TTS 语音合成
+                    TTS 语音合成
               </CardHeader>
               <CardContent className="text-lg mb-6">
                 输入文本，对比多个供应商的合成效果
@@ -123,11 +123,11 @@ export default function Home() {
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center border-2 border-foreground">
                     <Settings size={24} strokeWidth={2.5} className="text-foreground" />
                   </div>
-                  <div>
+                <div>
                     <h3 className="text-xl font-heading font-bold text-foreground mb-1">设置</h3>
                     <p className="text-mutedForeground">
-                      配置API密钥、音色参数和默认设置
-                    </p>
+                    配置API密钥、音色参数和默认设置
+                  </p>
                   </div>
                 </div>
                 <ArrowRight size={24} strokeWidth={2.5} className="text-mutedForeground" />

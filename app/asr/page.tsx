@@ -125,114 +125,114 @@ export default function ASRPage() {
             <h2 className="text-2xl font-heading font-bold">上传音频文件</h2>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-4 mb-4">
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={handleFileChange}
+          <div className="flex items-center gap-4 mb-4">
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={handleFileChange}
                 className="block w-full text-sm text-mutedForeground
-                  file:mr-4 file:py-2 file:px-4
+                file:mr-4 file:py-2 file:px-4
                   file:rounded-full file:border-2 file:border-foreground
                   file:text-sm file:font-bold
                   file:bg-accent file:text-accentForeground
                   hover:file:bg-accent/90 file:shadow-pop file:cursor-pointer"
-              />
-            </div>
+            />
+          </div>
 
-            {file && (
+          {file && (
               <div className="mb-4 p-4 bg-muted rounded-lg border-2 border-border">
                 <p className="text-sm text-mutedForeground mb-2">
                   已选择: <span className="font-bold text-foreground">{file.name}</span>
                   <span className="ml-2">({(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-                </p>
-                {audioUrl && (
-                  <audio controls src={audioUrl} className="w-full mt-2" />
-                )}
-              </div>
-            )}
+              </p>
+              {audioUrl && (
+                <audio controls src={audioUrl} className="w-full mt-2" />
+              )}
+            </div>
+          )}
 
-            {/* 识别参数 */}
+          {/* 识别参数 */}
             <div className="border-t-2 border-border pt-6 mb-6">
               <h3 className="text-xl font-heading font-bold mb-4">识别参数</h3>
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
                   <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
-                    语言
-                  </label>
-                  <select
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
+                  语言
+                </label>
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
                     className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
-                  >
-                    <option value="zh">中文</option>
-                    <option value="en">英文</option>
-                    <option value="zh-en">中英文混合</option>
-                  </select>
-                </div>
-                <div>
+                >
+                  <option value="zh">中文</option>
+                  <option value="en">英文</option>
+                  <option value="zh-en">中英文混合</option>
+                </select>
+              </div>
+              <div>
                   <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
-                    音频格式
-                  </label>
-                  <select
-                    value={format}
-                    onChange={(e) => setFormat(e.target.value)}
+                  音频格式
+                </label>
+                <select
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value)}
                     className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
-                  >
-                    <option value="wav">WAV</option>
-                    <option value="mp3">MP3</option>
-                    <option value="m4a">M4A</option>
-                  </select>
-                </div>
+                >
+                  <option value="wav">WAV</option>
+                  <option value="mp3">MP3</option>
+                  <option value="m4a">M4A</option>
+                </select>
               </div>
             </div>
+          </div>
 
-            {/* 供应商选择 */}
+          {/* 供应商选择 */}
             <div className="border-t-2 border-border pt-6 mb-6">
               <h3 className="text-xl font-heading font-bold mb-4">选择供应商</h3>
               <div className="space-y-3">
-                {enabledProviders.map((provider) => {
-                  return (
+              {enabledProviders.map((provider) => {
+                return (
                     <Card key={provider.id} featured={false} hover={false} className="mb-2">
                       <label className="flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={true}
-                          onChange={() => toggleProvider(provider.id)}
+                    <input
+                      type="checkbox"
+                      checked={true}
+                      onChange={() => toggleProvider(provider.id)}
                           className="w-5 h-5 rounded border-2 border-foreground accent-accent cursor-pointer mr-3"
-                        />
+                    />
                         <span className="font-bold text-foreground">{provider.name}</span>
                         <span className="ml-3 text-xs px-2 py-1 bg-accent text-accentForeground rounded-full font-bold">
-                          {provider.templateType || 'custom'}
-                        </span>
-                      </label>
+                      {provider.templateType || 'custom'}
+                    </span>
+                  </label>
                     </Card>
-                  );
-                })}
-              </div>
-              {enabledProviders.length === 0 && (
-                <p className="text-sm text-mutedForeground mt-2">
-                  提示：请先在设置页面配置API密钥并启用供应商
-                </p>
-              )}
+                );
+              })}
             </div>
+            {enabledProviders.length === 0 && (
+                <p className="text-sm text-mutedForeground mt-2">
+                提示：请先在设置页面配置API密钥并启用供应商
+              </p>
+            )}
+          </div>
 
             <div className="flex items-center gap-4 flex-wrap">
               <Button
-                onClick={handleCompare}
-                disabled={!file || loading || enabledProviders.length === 0}
+            onClick={handleCompare}
+            disabled={!file || loading || enabledProviders.length === 0}
                 showArrow={true}
-              >
-                {loading ? '识别中...' : '开始识别'}
+          >
+            {loading ? '识别中...' : '开始识别'}
               </Button>
-              {enabledProviders.length === 0 && (
-                <Link
-                  href="/settings"
+          {enabledProviders.length === 0 && (
+            <Link
+              href="/settings"
                   className="text-sm text-accent hover:text-accent/80 font-bold underline"
-                >
-                  请先配置API密钥
-                </Link>
-              )}
-            </div>
+            >
+              请先配置API密钥
+            </Link>
+          )}
+        </div>
           </CardContent>
         </Card>
 

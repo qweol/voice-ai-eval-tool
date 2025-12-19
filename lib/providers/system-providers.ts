@@ -140,7 +140,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
 
     providers.push({
       id: 'system-minimax-http',
-      name: 'Minimax HTTP（系统预置）',
+      name: 'Minimax（系统预置）',
       type: 'generic',
       serviceType: 'tts',
       apiUrl: process.env.MINIMAX_TTS_API_URL,

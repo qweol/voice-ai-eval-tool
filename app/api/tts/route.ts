@@ -18,12 +18,13 @@ interface RequestBody {
   options?: TTSOptions;
   providerVoices?: ProviderVoice[];
   providers?: GenericProviderConfig[]; // API配置
+  batchCount?: number; // 批量生成次数（1-10）
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: RequestBody = await request.json();
-    const { text, options, providerVoices, providers } = body;
+    const { text, options, providerVoices, providers, batchCount } = body;
 
     if (!text || !text.trim()) {
       return NextResponse.json(
@@ -33,6 +34,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`收到 TTS 请求，文本长度: ${text.length}`);
+    const safeBatchCount = Math.max(1, Math.min(10, Number.isFinite(batchCount as number) ? (batchCount as number) : 1));
+    if (batchCount !== undefined && safeBatchCount !== batchCount) {
+      console.warn(`⚠️ batchCount 非法或超范围，已修正: ${batchCount} -> ${safeBatchCount}`);
+    }
 
     // 确保音频目录存在（可通过环境变量配置）
     const audioDir =
@@ -127,23 +132,22 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    // 使用 Promise.allSettled 确保即使某个供应商失败也不影响其他
-    const results = await Promise.allSettled(
-      providerCalls.map(async (providerCall) => {
+    // 批量生成：按“顺序”执行（所有供应商 + 所有次数都顺序），确保稳定、减少限流风险
+    const formattedResults: any[] = [];
+    for (const providerCall of providerCalls) {
+      for (let runIndex = 1; runIndex <= safeBatchCount; runIndex++) {
         try {
           const overallStart = Date.now();
           const result = await providerCall.fn();
 
-          // 保存音频文件
-          const filename = `${providerCall.id}_${Date.now()}.mp3`;
+          // 保存音频文件（批量下避免文件名冲突）
+          const rand = Math.random().toString(36).slice(2, 8);
+          const filename = `${providerCall.id}_${Date.now()}_${runIndex}_${rand}.mp3`;
           const filepath = path.join(audioDir, filename);
 
-          // 如果有真实的音频数据，保存到文件
           if (result.audioBuffer && result.audioBuffer.length > 0) {
             await writeFile(filepath, result.audioBuffer);
           } else {
-            // 如果是模拟数据（空 buffer），创建一个占位文件
-            // 实际使用时应该有真实的音频数据
             console.warn(`${providerCall.name} 返回空音频数据，创建占位文件`);
             await writeFile(filepath, Buffer.from([]));
           }
@@ -173,8 +177,9 @@ export async function POST(request: NextRequest) {
               }
             : { warning: 'pricing_rule_not_found' };
 
-          return {
+          formattedResults.push({
             provider: providerCall.name,
+            runIndex,
             audioUrl: `/api/storage/audio/${filename}`,
             duration: endToEndTime / 1000,
             ttfb: result.ttfb,
@@ -184,34 +189,20 @@ export async function POST(request: NextRequest) {
             cost,
             pricing: pricingMetadata,
             status: 'success',
-          };
+          });
         } catch (error: any) {
-          console.error(`${providerCall.name} 合成失败:`, error.message);
-          return {
+          console.error(`${providerCall.name} 合成失败 (run ${runIndex}/${safeBatchCount}):`, error.message);
+          formattedResults.push({
             provider: providerCall.name,
+            runIndex,
             audioUrl: '',
             duration: 0,
             status: 'failed',
             error: error.message,
-          };
+          });
         }
-      })
-    );
-
-    // 格式化结果
-    const formattedResults = results.map((result) => {
-      if (result.status === 'fulfilled') {
-        return result.value;
-      } else {
-        return {
-          provider: '未知',
-          audioUrl: '',
-          duration: 0,
-          status: 'failed',
-          error: result.reason?.message || '未知错误',
-        };
       }
-    });
+      }
 
     return NextResponse.json({
       success: true,

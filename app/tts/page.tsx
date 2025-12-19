@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Play, Tag } from 'lucide-react';
@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/Input';
 
 interface TTSResult {
   provider: string;
+  runIndex?: number;
   audioUrl: string;
   duration: number;
   ttfb?: number | null;
@@ -43,12 +44,44 @@ interface ProviderVoice {
   enabled: boolean;
 }
 
+interface StatSummary {
+  avg: number;
+  min: number;
+  max: number;
+}
+
+interface CostSummary {
+  avg: number;
+  sum: number;
+}
+
+interface ProviderGroup {
+  provider: string;
+  runs: TTSResult[];
+  successCount: number;
+  failedCount: number;
+  stats: {
+    ttfb: StatSummary | null;
+    totalTime: StatSummary | null;
+    cost: CostSummary | null;
+  };
+}
+
 export default function TTSPage() {
   const router = useRouter();
   const [text, setText] = useState('');
   const [results, setResults] = useState<TTSResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [speed, setSpeed] = useState(1.0);
+  const [batchCount, setBatchCount] = useState(3);
+  const [ttsProgress, setTtsProgress] = useState<{
+    status: string;
+    total: number;
+    completed: number;
+    failed: number;
+    percentage: number;
+    current?: { provider?: string; runIndex?: number };
+  } | null>(null);
   const [providerVoices, setProviderVoices] = useState<ProviderVoice[]>([]);
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
   // 存储每个 provider 的动态音色列表（从 API 获取）
@@ -147,11 +180,12 @@ export default function TTSPage() {
     // enabled 状态由 providerVoices 中的 enabled 字段控制
   };
 
-  const handleCompare = async () => {
+  const handleCompare = async (opts?: { batchCount?: number }) => {
     if (!text.trim()) return;
 
     setLoading(true);
     setResults([]);
+    setTtsProgress(null);
 
     try {
       // 获取所有启用的供应商（包括系统预置）
@@ -160,7 +194,7 @@ export default function TTSPage() {
         (p) => p.serviceType === 'tts' || p.serviceType === 'both'
       );
 
-      const res = await fetch('/api/tts', {
+      const res = await fetch('/api/tts/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -168,6 +202,7 @@ export default function TTSPage() {
           options: {
             speed,
           },
+          batchCount: opts?.batchCount ?? 1,
           providerVoices: providerVoices.filter((pv) => pv.enabled),
           providers,
         }),
@@ -177,49 +212,74 @@ export default function TTSPage() {
         throw new Error('合成失败');
       }
 
-      const data = await res.json();
-      setResults(data.results);
+      const startData = await res.json();
+      const jobId = startData?.data?.jobId as string | undefined;
+      if (!jobId) {
+        throw new Error('启动任务失败：缺少 jobId');
+      }
+
+      // 轮询进度（参考 batch-test 方式）
+      const poll = async () => {
+        const resp = await fetch(`/api/tts/execute?jobId=${encodeURIComponent(jobId)}`);
+        if (!resp.ok) return;
+        const progressJson = await resp.json();
+        const progress = progressJson?.data;
+        if (progress) {
+          setTtsProgress(progress);
+          if (progress.status === 'COMPLETED' || progress.status === 'FAILED') {
+            const resultResp = await fetch(`/api/tts/result?jobId=${encodeURIComponent(jobId)}`);
+            if (resultResp.ok) {
+              const resultJson = await resultResp.json();
+              setResults(resultJson?.data?.results || []);
+            }
+            setLoading(false);
+            return true;
+          }
+        }
+        return false;
+      };
+
+      // 立即拉一次，避免空白
+      await poll();
+      const interval = setInterval(async () => {
+        const done = await poll();
+        if (done) clearInterval(interval);
+      }, 1000);
     } catch (error) {
       console.error('Error:', error);
       alert('合成过程出错，请检查配置或稍后重试');
     } finally {
-      setLoading(false);
+      // loading 由轮询结束时关闭；这里只在异常时兜底关闭（如果已开始轮询，会立刻被轮询逻辑再置为 false）
     }
   };
 
   const playAll = () => {
-    results.forEach((result, index) => {
-      if (result.status === 'success') {
+    const successAudios = Array.from(
+      document.querySelectorAll<HTMLAudioElement>('audio[data-tts-audio="true"]')
+    );
+    successAudios.forEach((audio, index) => {
         setTimeout(() => {
-          const audio = document.getElementById(`audio-${index}`) as HTMLAudioElement;
-          if (audio) {
             audio.play();
-          }
         }, index * 3000); // 每个音频间隔3秒播放
-      }
     });
   };
 
-  // 标记为 BadCase
-  const handleMarkAsBadCase = (result: TTSResult) => {
-    // 收集所有成功的音频 URL
-    const audioUrls: Record<string, string> = {};
-    results.forEach(r => {
-      if (r.status === 'success') {
-        audioUrls[r.provider] = r.audioUrl;
-      }
-    });
+  // 标记为 BadCase（单次：只保存该次音频）
+  const handleMarkAsBadCaseSingle = (result: TTSResult) => {
+    const audioUrls: Record<string, string> = {
+      [result.provider]: result.audioUrl,
+    };
 
-    // 创建 BadCase
+    const runInfo = result.runIndex ? ` (第${result.runIndex}次)` : '';
     const badCase = createBadCase({
       text,
-      category: 'OTHER', // 默认分类，用户可以后续修改
+      category: 'OTHER',
       severity: BadCaseSeverity.MAJOR,
       status: BadCaseStatus.OPEN,
-      description: `从 TTS 测试标记，供应商: ${result.provider}`,
+      description: `从 TTS 测试标记，供应商: ${result.provider}${runInfo}`,
       audioUrls,
       priority: 3,
-      tags: ['TTS测试', result.provider],
+      tags: ['TTS测试', result.provider, ...(result.runIndex ? [`run:${result.runIndex}`] : [])],
     });
 
     if (confirm(`已标记为 BadCase！\n\nID: ${badCase.id}\n\n是否立即查看详情？`)) {
@@ -236,10 +296,12 @@ export default function TTSPage() {
       return;
     }
 
-    // 收集所有成功的音频 URL
+    // 批量：每个供应商只取“第一条成功结果”，避免多次覆盖
     const audioUrls: Record<string, string> = {};
     successResults.forEach(r => {
+      if (!audioUrls[r.provider]) {
       audioUrls[r.provider] = r.audioUrl;
+      }
     });
 
     // 创建 BadCase
@@ -248,16 +310,93 @@ export default function TTSPage() {
       category: 'OTHER',
       severity: BadCaseSeverity.MAJOR,
       status: BadCaseStatus.OPEN,
-      description: `从 TTS 测试批量标记，包含 ${successResults.length} 个供应商`,
+      description: `从 TTS 测试批量标记（每供应商取首条成功结果），包含 ${Object.keys(audioUrls).length} 个供应商`,
       audioUrls,
       priority: 3,
       tags: ['TTS测试', '批量标记'],
     });
 
-    if (confirm(`已创建 BadCase！\n\nID: ${badCase.id}\n包含 ${successResults.length} 个供应商的音频\n\n是否立即查看详情？`)) {
+    const providerCount = Object.keys(audioUrls).length;
+    if (confirm(`已创建 BadCase！\n\nID: ${badCase.id}\n包含 ${providerCount} 个供应商的音频\n\n是否立即查看详情？`)) {
       router.push(`/badcases/${badCase.id}`);
     }
   };
+
+  const groupedResults = useMemo<ProviderGroup[]>(() => {
+    if (results.length === 0) return [];
+
+    const groups: Record<string, { provider: string; runs: TTSResult[] }> = {};
+    results.forEach((result) => {
+      const key = result.provider || '未知';
+      if (!groups[key]) {
+        groups[key] = { provider: key, runs: [] };
+      }
+      groups[key].runs.push(result);
+    });
+
+    const calcStat = (values: Array<number | null | undefined>): StatSummary | null => {
+      const filtered = values.filter(
+        (value): value is number => typeof value === 'number' && !Number.isNaN(value)
+      );
+      if (filtered.length === 0) return null;
+      const sum = filtered.reduce((acc, curr) => acc + curr, 0);
+      return {
+        avg: sum / filtered.length,
+        min: Math.min(...filtered),
+        max: Math.max(...filtered),
+      };
+    };
+
+    const buildCostSummary = (values: Array<number | null | undefined>): CostSummary | null => {
+      const filtered = values.filter(
+        (value): value is number => typeof value === 'number' && !Number.isNaN(value)
+      );
+      if (filtered.length === 0) return null;
+      const sum = filtered.reduce((acc, curr) => acc + curr, 0);
+      return {
+        avg: sum / filtered.length,
+        sum,
+      };
+    };
+
+    return Object.values(groups).map((group) => {
+      const successRuns = group.runs.filter((run) => run.status === 'success');
+      const failedCount = group.runs.length - successRuns.length;
+
+      return {
+        provider: group.provider,
+        runs: group.runs,
+        successCount: successRuns.length,
+        failedCount,
+        stats: {
+          ttfb: calcStat(successRuns.map((run) => run.ttfb ?? null)),
+          totalTime: calcStat(successRuns.map((run) => run.totalTime ?? null)),
+          cost: buildCostSummary(successRuns.map((run) => run.cost ?? null)),
+        },
+      };
+    });
+  }, [results]);
+
+  const formatMs = (value: number | undefined | null) =>
+    typeof value === 'number' ? `${Math.round(value)}ms` : '-';
+
+  const formatCost = (value: number | undefined | null) =>
+    typeof value === 'number' ? `$${value.toFixed(4)}` : '-';
+
+  const summaryMetrics = useMemo(() => {
+    const successRuns = results.filter(r => r.status === 'success');
+    const failedCount = results.filter(r => r.status === 'failed').length;
+    const totalCost = successRuns
+      .filter(r => typeof r.cost === 'number')
+      .reduce((sum, run) => sum + (run.cost || 0), 0);
+    return {
+      providerCount: groupedResults.length,
+      successCount: successRuns.length,
+      failedCount,
+      totalCost,
+      hasEstimated: results.some(r => r.pricing?.isEstimated),
+    };
+  }, [groupedResults, results]);
 
   return (
     <div className="min-h-screen bg-gray-50 relative overflow-hidden">
@@ -291,12 +430,36 @@ export default function TTSPage() {
 
             <div className="flex items-center gap-4 mb-6 flex-wrap">
               <Button
-                onClick={handleCompare}
+                onClick={() => handleCompare({ batchCount: 1 })}
                 disabled={!text.trim() || loading || providerVoices.filter(pv => pv.enabled).length === 0}
                 showArrow={true}
               >
                 {loading ? '合成中...' : '开始合成'}
               </Button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-mutedForeground font-medium">批量次数</span>
+                <select
+                  value={batchCount}
+                  onChange={(e) => setBatchCount(Number(e.target.value))}
+                  className="border-2 border-border rounded-lg px-3 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium text-sm"
+                  disabled={loading}
+                >
+                  {Array.from({ length: 10 }, (_, idx) => idx + 1).map(n => (
+                    <option key={n} value={n}>
+                      {n} 次
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  onClick={() => handleCompare({ batchCount })}
+                  disabled={!text.trim() || loading || providerVoices.filter(pv => pv.enabled).length === 0 || batchCount < 1}
+                  variant="secondary"
+                  className="text-sm"
+                >
+                  批量生成
+                </Button>
+              </div>
 
               <div className="text-sm text-mutedForeground font-medium">
                 字数: <span className="text-foreground font-bold">{text.length}</span>
@@ -433,12 +596,56 @@ export default function TTSPage() {
         </Card>
 
         {/* 加载状态 */}
-        {loading && (
+        {loading && (() => {
+          const enabledCount = providerVoices.filter(pv => pv.enabled).length;
+          const totalTasks = enabledCount * batchCount;
+          const total = ttsProgress?.total || totalTasks;
+          const completed = ttsProgress?.completed || 0;
+          const percentage = ttsProgress?.percentage || 0;
+          const currentProvider = ttsProgress?.current?.provider;
+          const currentRunIndex = ttsProgress?.current?.runIndex;
+          return (
           <Card className="text-center" hover={false}>
+              <div className="mb-6">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-4 border-accent border-t-transparent mb-4"></div>
-            <p className="text-mutedForeground font-medium">正在调用各供应商 API 进行合成...</p>
+                <p className="text-mutedForeground font-medium mb-2">
+                  正在调用各供应商 API 进行合成...
+                </p>
+                <p className="text-sm text-mutedForeground mb-4">
+                  共 {enabledCount} 个供应商，每个生成 {batchCount} 次，总计 {totalTasks} 个任务
+                </p>
+
+                {ttsProgress && total > 0 ? (
+                  <div className="w-full max-w-3xl mx-auto">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-700">执行进度</span>
+                      <span className="text-sm text-gray-600">
+                        {completed}/{total} ({percentage}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-3 overflow-hidden border-2 border-border">
+                      <div
+                        className="h-full bg-accent rounded-full transition-all duration-300"
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    {(currentProvider || currentRunIndex) && (
+                      <div className="text-xs text-mutedForeground mt-2">
+                        当前：{currentProvider || '-'}
+                        {currentRunIndex ? ` · 第${currentRunIndex}次` : ''}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  // fallback：进度尚未拿到（例如刚启动任务）
+                  <div className="w-full max-w-md mx-auto bg-muted rounded-full h-3 overflow-hidden border-2 border-border relative">
+                    <div className="h-full bg-accent rounded-full absolute w-1/2 animate-progress-indeterminate" />
+                  </div>
+                )}
+              </div>
           </Card>
-        )}
+          );
+        })()}
 
         {/* 结果展示 */}
         {results.length > 0 && !loading && (
@@ -466,70 +673,116 @@ export default function TTSPage() {
             </div>
 
             <div className="space-y-4">
-              {results.map((result, i) => (
-                <Card key={i} featured={false} hover={false} className="mb-4">
-                  <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+              {groupedResults.map((group, idx) => (
+                <Card key={`${group.provider}-${idx}`} featured={false} hover={false} className="mb-4">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                      <div>
                     <h3 className="text-xl font-heading font-bold text-foreground">
-                      {result.provider}
+                          {group.provider}
                     </h3>
-                    <div className="flex items-center gap-4 flex-wrap">
-                      <div className="flex flex-col gap-1 text-sm text-mutedForeground">
-                        <div className="flex gap-4 flex-wrap">
-                          <span className="font-medium">首token: <span className="text-foreground font-bold">{result.ttfb != null ? `${result.ttfb}ms` : '-'}</span></span>
-                          <span className="font-medium">总耗时: <span className="text-foreground font-bold">{result.totalTime != null ? `${result.totalTime}ms` : '-'}</span></span>
-                          {result.cost !== undefined && result.cost !== null && (
-                            <span className="font-medium">
-                              成本: <span className="text-foreground font-bold">
-                                ${result.cost.toFixed(4)}
-                                {result.pricing?.isEstimated && (
-                                  <span className="text-xs text-yellow-600 ml-1" title="估算值">(估算)</span>
-                                )}
-                                {result.pricing?.originalCurrency && result.pricing.originalCurrency !== 'USD' && (
-                                  <span className="text-xs text-mutedForeground ml-1">
-                                    ({result.pricing.originalCurrency} {result.pricing.originalAmount?.toFixed(4)})
-                                  </span>
-                                )}
-                              </span>
-                            </span>
+                        <div className="mt-2 text-sm text-mutedForeground font-medium">
+                          成功 {group.successCount} 次 · 失败 {group.failedCount} 次
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-sm">
+                        <div className="px-3 py-2 bg-muted rounded-lg border border-border min-w-[220px]">
+                          <div className="text-xs uppercase tracking-wide text-mutedForeground font-bold mb-1">
+                            首 token
+                          </div>
+                          {group.stats.ttfb ? (
+                            <div className="text-foreground text-sm">
+                              均值 {formatMs(group.stats.ttfb.avg)} · 最快 {formatMs(group.stats.ttfb.min)} · 最慢 {formatMs(group.stats.ttfb.max)}
+                            </div>
+                          ) : (
+                            <div className="text-mutedForeground text-sm">无成功数据</div>
+                          )}
+                        </div>
+                        <div className="px-3 py-2 bg-muted rounded-lg border border-border min-w-[220px]">
+                          <div className="text-xs uppercase tracking-wide text-mutedForeground font-bold mb-1">
+                            总耗时
+                          </div>
+                          {group.stats.totalTime ? (
+                            <div className="text-foreground text-sm">
+                              均值 {formatMs(group.stats.totalTime.avg)} · 最快 {formatMs(group.stats.totalTime.min)} · 最慢 {formatMs(group.stats.totalTime.max)}
+                            </div>
+                          ) : (
+                            <div className="text-mutedForeground text-sm">无成功数据</div>
+                          )}
+                        </div>
+                        <div className="px-3 py-2 bg-muted rounded-lg border border-border min-w-[200px]">
+                          <div className="text-xs uppercase tracking-wide text-mutedForeground font-bold mb-1">
+                            成本
+                          </div>
+                          {group.stats.cost ? (
+                            <div className="text-foreground text-sm">
+                              均值 {formatCost(group.stats.cost.avg)} · 总计 {formatCost(group.stats.cost.sum)}
+                            </div>
+                          ) : (
+                            <div className="text-mutedForeground text-sm">无成功数据</div>
                           )}
                         </div>
                       </div>
-                      {result.status === 'success' ? (
-                        <span className="px-3 py-1 bg-quaternary text-white rounded-full font-bold text-sm">✓ 成功</span>
-                      ) : (
-                        <span className="px-3 py-1 bg-red-500 text-white rounded-full font-bold text-sm">✗ 失败</span>
-                      )}
                     </div>
-                  </div>
 
-                  {result.status === 'success' ? (
-                    <>
-                      <div className="bg-muted rounded-lg p-4 mb-4 border-2 border-border">
+                    <details className="rounded-lg border border-border bg-muted/30">
+                      <summary className="cursor-pointer list-none px-4 py-3 flex items-center justify-between">
+                        <span className="font-heading font-bold text-foreground">
+                          查看明细（{group.runs.length} 次）
+                        </span>
+                        <span className="text-sm text-mutedForeground">点击展开</span>
+                      </summary>
+                      <div className="divide-y divide-border">
+                        {group.runs.map((run, runIdx) => {
+                          const displayIndex = run.runIndex ?? runIdx + 1;
+                          if (run.status !== 'success') {
+                            return (
+                              <div
+                                key={`${group.provider}-failed-${runIdx}`}
+                                className="p-4 bg-red-50 text-red-700 text-sm font-medium"
+                              >
+                                第 {displayIndex} 次失败：{run.error || '合成失败'}
+                  </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={`${group.provider}-success-${runIdx}`}
+                              className="p-4 flex flex-col gap-4 lg:flex-row lg:items-center"
+                            >
+                              <div className="flex-1">
+                                <div className="text-sm font-bold text-foreground mb-2">
+                                  第 {displayIndex} 次
+                                </div>
+                                <div className="bg-white rounded-lg border border-border p-3">
                         <audio
-                          id={`audio-${i}`}
                           controls
-                          src={result.audioUrl}
+                                    src={run.audioUrl}
                           className="w-full"
+                                    data-tts-audio="true"
                         />
                       </div>
-                      <div className="flex justify-end">
+                              </div>
+                              <div className="flex-[1.5] flex flex-wrap gap-4 text-sm text-mutedForeground">
+                                <span>首token: <span className="font-bold text-foreground">{run.ttfb != null ? `${run.ttfb}ms` : '-'}</span></span>
+                                <span>总耗时: <span className="font-bold text-foreground">{run.totalTime != null ? `${run.totalTime}ms` : '-'}</span></span>
+                                <span>成本: <span className="font-bold text-foreground">{typeof run.cost === 'number' ? `$${run.cost.toFixed(4)}` : '-'}</span></span>
+                              </div>
                         <Button
-                          onClick={() => handleMarkAsBadCase(result)}
+                                onClick={() => handleMarkAsBadCaseSingle(run)}
                           variant="secondary"
-                          className="text-sm"
+                                className="text-sm flex-shrink-0 self-start lg:self-center"
                         >
                           <Tag size={14} strokeWidth={2.5} className="mr-2" />
                           标记为 BadCase
                         </Button>
                       </div>
-                    </>
-                  ) : (
-                    <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4">
-                      <p className="text-red-600 text-sm font-medium">
-                        {result.error || '合成失败'}
-                      </p>
+                          );
+                        })}
+                      </div>
+                    </details>
                     </div>
-                  )}
                 </Card>
               ))}
             </div>
@@ -539,29 +792,22 @@ export default function TTSPage() {
               <h3 className="font-heading font-bold text-foreground mb-4">统计信息</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <span className="text-mutedForeground">总供应商数:</span>{' '}
-                  <span className="font-bold text-foreground">{results.length}</span>
+                  <span className="text-mutedForeground">供应商数:</span>{' '}
+                  <span className="font-bold text-foreground">{summaryMetrics.providerCount}</span>
                 </div>
                 <div>
-                  <span className="text-mutedForeground">成功:</span>{' '}
-                  <span className="font-bold text-quaternary">
-                    {results.filter(r => r.status === 'success').length}
-                  </span>
+                  <span className="text-mutedForeground">成功次数:</span>{' '}
+                  <span className="font-bold text-quaternary">{summaryMetrics.successCount}</span>
                 </div>
                 <div>
-                  <span className="text-mutedForeground">失败:</span>{' '}
-                  <span className="font-bold text-red-600">
-                    {results.filter(r => r.status === 'failed').length}
-                  </span>
+                  <span className="text-mutedForeground">失败次数:</span>{' '}
+                  <span className="font-bold text-red-600">{summaryMetrics.failedCount}</span>
                 </div>
                 <div>
                   <span className="text-mutedForeground">总成本:</span>{' '}
                   <span className="font-bold text-foreground">
-                    ${results
-                      .filter(r => r.status === 'success' && r.cost !== undefined && r.cost !== null)
-                      .reduce((sum, r) => sum + (r.cost || 0), 0)
-                      .toFixed(4)}
-                    {results.some(r => r.pricing?.isEstimated) && (
+                    ${summaryMetrics.totalCost.toFixed(4)}
+                    {summaryMetrics.hasEstimated && (
                       <span className="text-xs text-yellow-600 ml-1" title="部分为估算值">(估算)</span>
                     )}
                   </span>
