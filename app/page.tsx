@@ -45,7 +45,7 @@ export default function Home() {
           </Link>
 
           <Link href="/tts" className="block">
-            <Card featured={true} className="h-full cursor-pointer">
+            <Card featured={false} className="h-full cursor-pointer">
               <CardHeader 
                 icon={<Volume2 size={24} strokeWidth={2.5} />}
                 badge={
