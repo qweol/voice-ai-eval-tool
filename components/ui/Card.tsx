@@ -10,7 +10,7 @@ interface CardProps {
 export function Card({ children, className = '', featured = false, hover = true }: CardProps) {
   const baseStyles = 'bg-card border-2 border-foreground rounded-xl p-6 transition-all duration-300 ease-bounce';
   const shadowStyle = featured ? 'shadow-card-pink' : 'shadow-card';
-  const hoverStyle = hover ? 'hover:-rotate-1 hover:scale-[1.02]' : '';
+  const hoverStyle = hover ? 'hover:-translate-y-1 hover:scale-[1.02]' : '';
 
   return (
     <div className={`${baseStyles} ${shadowStyle} ${hoverStyle} ${className}`}>
