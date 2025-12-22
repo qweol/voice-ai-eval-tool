@@ -127,6 +127,8 @@ export async function POST(request: NextRequest) {
         name: provider.name,
         id: provider.id,
         templateType: provider.templateType,
+        modelId: provider.selectedModels?.tts,
+        voice,
         providerConfig: provider, // 保存完整的 provider 配置
         fn: () => callGenericTTS(provider, text, ttsOptions),
       };
@@ -179,6 +181,10 @@ export async function POST(request: NextRequest) {
 
           formattedResults.push({
             provider: providerCall.name,
+            providerId: providerCall.id,
+            modelId: result.modelId ?? providerCall.modelId,
+            voice: providerCall.voice,
+            templateType: providerCall.templateType,
             runIndex,
             audioUrl: `/api/storage/audio/${filename}`,
             duration: endToEndTime / 1000,
@@ -194,6 +200,10 @@ export async function POST(request: NextRequest) {
           console.error(`${providerCall.name} 合成失败 (run ${runIndex}/${safeBatchCount}):`, error.message);
           formattedResults.push({
             provider: providerCall.name,
+            providerId: providerCall.id,
+            modelId: providerCall.modelId,
+            voice: providerCall.voice,
+            templateType: providerCall.templateType,
             runIndex,
             audioUrl: '',
             duration: 0,

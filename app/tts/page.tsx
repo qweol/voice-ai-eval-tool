@@ -15,6 +15,10 @@ import { Textarea } from '@/components/ui/Input';
 interface TTSResult {
   provider: string;
   runIndex?: number;
+  providerId?: string;
+  modelId?: string;
+  voice?: string;
+  templateType?: string;
   audioUrl: string;
   duration: number;
   ttfb?: number | null;
@@ -67,6 +71,46 @@ interface ProviderGroup {
   };
 }
 
+type TtsExportReportV1 = {
+  reportVersion: 1;
+  generatedAt: string;
+  input: {
+    text: string;
+    textLength: number;
+  };
+  config: {
+    speed: number;
+    batchCount: number;
+  };
+  providersSnapshot: Array<{
+    providerId: string;
+    providerName: string;
+    templateType?: string;
+    modelId?: string;
+    voice?: string;
+    enabled: boolean;
+  }>;
+  summary: {
+    providerCount: number;
+    successCount: number;
+    failedCount: number;
+    totalCost: number;
+    hasEstimated: boolean;
+    byProvider: Array<{
+      provider: string;
+      providerId?: string;
+      modelId?: string;
+      voice?: string;
+      templateType?: string;
+      runs: number;
+      successCount: number;
+      failedCount: number;
+      stats: ProviderGroup['stats'];
+    }>;
+  };
+  runs: TTSResult[];
+};
+
 export default function TTSPage() {
   const router = useRouter();
   const [text, setText] = useState('');
@@ -86,6 +130,14 @@ export default function TTSPage() {
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
   // 存储每个 provider 的动态音色列表（从 API 获取）
   const [providerVoicesMap, setProviderVoicesMap] = useState<Record<string, VoiceDefinition[]>>({});
+  const [lastRunConfig, setLastRunConfig] = useState<{
+    speed: number;
+    batchCount: number;
+    text: string;
+    providerVoices: ProviderVoice[];
+    providers: GenericProviderConfig[];
+    startedAt: string;
+  } | null>(null);
 
   useEffect(() => {
     const config = getConfig();
@@ -193,6 +245,16 @@ export default function TTSPage() {
       const providers = allProviders.filter(
         (p) => p.serviceType === 'tts' || p.serviceType === 'both'
       );
+      const runBatchCount = opts?.batchCount ?? 1;
+      const selectedProviderVoices = providerVoices.filter((pv) => pv.enabled);
+      setLastRunConfig({
+        speed,
+        batchCount: runBatchCount,
+        text,
+        providerVoices: selectedProviderVoices,
+        providers,
+        startedAt: new Date().toISOString(),
+      });
 
       const res = await fetch('/api/tts/execute', {
         method: 'POST',
@@ -202,8 +264,8 @@ export default function TTSPage() {
           options: {
             speed,
           },
-          batchCount: opts?.batchCount ?? 1,
-          providerVoices: providerVoices.filter((pv) => pv.enabled),
+          batchCount: runBatchCount,
+          providerVoices: selectedProviderVoices,
           providers,
         }),
       });
@@ -409,6 +471,79 @@ export default function TTSPage() {
       hasEstimated: results.some(r => r.pricing?.isEstimated),
     };
   }, [groupedResults, results]);
+
+  const exportJsonReport = () => {
+    if (results.length === 0) return;
+
+    const providersSnapshot = (enabledProviders || []).map((p) => {
+      const pv = providerVoices.find((v) => v.providerId === p.id);
+      return {
+        providerId: p.id,
+        providerName: p.name,
+        templateType: p.templateType,
+        modelId: p.selectedModels?.tts,
+        voice: pv?.voice || p.selectedVoice,
+        enabled: Boolean(pv?.enabled),
+      };
+    });
+
+    const byProvider = groupedResults.map((g) => {
+      // 尝试从 runs 中补齐 providerId/modelId/voice（如果后端返回了）
+      const first = g.runs.find(r => r.status === 'success') || g.runs[0];
+      return {
+        provider: g.provider,
+        providerId: first?.providerId,
+        modelId: first?.modelId,
+        voice: first?.voice,
+        templateType: first?.templateType,
+        runs: g.runs.length,
+        successCount: g.successCount,
+        failedCount: g.failedCount,
+        stats: g.stats,
+      };
+    });
+
+    const report: TtsExportReportV1 = {
+      reportVersion: 1,
+      generatedAt: new Date().toISOString(),
+      input: {
+        text: lastRunConfig?.text ?? text,
+        textLength: (lastRunConfig?.text ?? text).length,
+      },
+      config: {
+        speed: lastRunConfig?.speed ?? speed,
+        batchCount: lastRunConfig?.batchCount ?? batchCount,
+      },
+      providersSnapshot,
+      summary: {
+        providerCount: summaryMetrics.providerCount,
+        successCount: summaryMetrics.successCount,
+        failedCount: summaryMetrics.failedCount,
+        totalCost: summaryMetrics.totalCost,
+        hasEstimated: summaryMetrics.hasEstimated,
+        byProvider,
+      },
+      runs: results,
+    };
+
+    const pretty = JSON.stringify(report, null, 2);
+    const blob = new Blob([pretty], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const d = new Date();
+    const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const filename = `tts_compare_report_${ts}.json`;
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 relative overflow-hidden">
@@ -672,6 +807,13 @@ export default function TTSPage() {
                 >
                   <Play size={16} strokeWidth={2.5} className="mr-2" />
                   一键播放全部
+                </Button>
+                <Button
+                  onClick={exportJsonReport}
+                  variant="secondary"
+                  className="text-sm"
+                >
+                  导出 JSON 报告
                 </Button>
                 <Button
                   onClick={handleMarkAllAsBadCase}

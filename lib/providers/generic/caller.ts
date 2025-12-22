@@ -439,7 +439,17 @@ export async function callGenericTTS(
       'ar': 'Arabic',
       'hi': 'Hindi',
     };
-    const language = options?.language ?? 'zh';
+    const detectDefaultLanguage = (): string => {
+      if (options?.language) {
+        return options.language;
+      }
+      if (config.templateType === 'cartesia') {
+        return /[\u4e00-\u9fff]/.test(text) ? 'zh' : 'en';
+      }
+      return 'zh';
+    };
+
+    const language = detectDefaultLanguage();
     const languageType = languageTypeMap[language] || 'Chinese';
 
     const variables: RequestVariables = {
@@ -487,8 +497,8 @@ export async function callGenericTTS(
       if (config.templateType === 'cartesia' && requestBody.speed !== undefined) {
         const speedValue = parseFloat(requestBody.speed);
         if (!isNaN(speedValue)) {
-          requestBody.speed = 1;
-          console.log('✅ Cartesia: 测试使用 speed = 0.5 (原始值为', speedValue, ')');
+          requestBody.speed = speedValue;
+          console.log('✅ Cartesia: speed 参数已转换为数字 =', speedValue);
         }
       }
 

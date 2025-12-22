@@ -93,6 +93,8 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
       name: provider.name,
       id: provider.id,
       templateType: provider.templateType,
+      modelId: provider.selectedModels?.tts,
+      voice,
       fn: () => callGenericTTS(provider, text, ttsOptions),
     };
   });
@@ -146,6 +148,10 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
 
           appendTtsJobResult(jobId, {
             provider: providerCall.name,
+            providerId: providerCall.id,
+            modelId: result.modelId ?? providerCall.modelId,
+            voice: providerCall.voice,
+            templateType: providerCall.templateType,
             runIndex,
             audioUrl: `/api/storage/audio/${filename}`,
             duration: endToEndTime / 1000,
@@ -164,6 +170,10 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
           failed++;
           appendTtsJobResult(jobId, {
             provider: providerCall.name,
+            providerId: providerCall.id,
+            modelId: providerCall.modelId,
+            voice: providerCall.voice,
+            templateType: providerCall.templateType,
             runIndex,
             audioUrl: '',
             duration: 0,

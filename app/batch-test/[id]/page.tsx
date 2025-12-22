@@ -50,6 +50,44 @@ interface TestResult {
   userRating?: any;
 }
 
+type BatchTestExportReportV1 = {
+  reportVersion: 1;
+  generatedAt: string;
+  batch: {
+    id: string;
+    name: string;
+    description?: string;
+    category: string;
+    tags: string[];
+    status: BatchTest['status'];
+    createdAt: string;
+    completedAt?: string;
+  };
+  config: any;
+  providers: string[];
+  summary: {
+    totalCases: number;
+    providerCount: number;
+    totalRuns: number;
+    successRuns: number;
+    failedRuns: number;
+    timeoutRuns: number;
+    successRate: number | null;
+    avgDurationSec: number | null;
+    totalCostUsd: number | null;
+  };
+  cases: Array<{
+    id: string;
+    orderIndex: number;
+    text: string;
+    category?: string;
+    expectedVoice?: string;
+    tags: string[];
+    results: TestResult[];
+  }>;
+  results: TestResult[];
+};
+
 const STATUS_LABELS: Record<string, string> = {
   DRAFT: '草稿',
   RUNNING: '运行中',
@@ -463,8 +501,95 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
     setShowBadCaseModal(true);
   };
 
+  const exportJsonReport = () => {
+    const totalRuns = batch.results.length;
+    const successRuns = batch.results.filter(r => r.status === 'SUCCESS').length;
+    const failedRuns = batch.results.filter(r => r.status === 'FAILED').length;
+    const timeoutRuns = batch.results.filter(r => r.status === 'TIMEOUT').length;
+
+    const durationValues = batch.results
+      .filter(r => r.status === 'SUCCESS')
+      .map(r => (typeof r.duration === 'number' ? r.duration : null))
+      .filter((v): v is number => typeof v === 'number' && !Number.isNaN(v));
+    const avgDurationSec = durationValues.length > 0
+      ? durationValues.reduce((a, b) => a + b, 0) / durationValues.length
+      : null;
+
+    const costValues = batch.results
+      .filter(r => r.status === 'SUCCESS')
+      .map(r => (typeof r.cost === 'number' ? r.cost : null))
+      .filter((v): v is number => typeof v === 'number' && !Number.isNaN(v));
+    const totalCostUsd = costValues.length > 0
+      ? costValues.reduce((a, b) => a + b, 0)
+      : null;
+
+    const report: BatchTestExportReportV1 = {
+      reportVersion: 1,
+      generatedAt: new Date().toISOString(),
+      batch: {
+        id: batch.id,
+        name: batch.name,
+        description: batch.description,
+        category: batch.category,
+        tags: batch.tags || [],
+        status: batch.status,
+        createdAt: batch.createdAt,
+        completedAt: batch.completedAt,
+      },
+      config: batch.config,
+      providers: batch.providers || [],
+      summary: {
+        totalCases: batch.totalCases ?? batch.testCases.length,
+        providerCount: batch.providers?.length ?? 0,
+        totalRuns,
+        successRuns,
+        failedRuns,
+        timeoutRuns,
+        successRate: totalRuns > 0 ? (successRuns / totalRuns) * 100 : null,
+        avgDurationSec,
+        totalCostUsd,
+      },
+      cases: resultsByCase.map(({ testCase, results }) => ({
+        id: testCase.id,
+        orderIndex: testCase.orderIndex,
+        text: testCase.text,
+        category: testCase.category,
+        expectedVoice: testCase.expectedVoice,
+        tags: testCase.tags || [],
+        results,
+      })),
+      results: batch.results,
+    };
+
+    const pretty = JSON.stringify(report, null, 2);
+    const blob = new Blob([pretty], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const d = new Date();
+    const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const filename = `batch_test_report_${batch.id}_${ts}.json`;
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
+      <div className="flex justify-end mb-4">
+        <button
+          onClick={exportJsonReport}
+          className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900"
+          title="导出当前批次的用例、配置与结果明细"
+        >
+          导出 JSON 报告
+        </button>
+      </div>
       <div className="space-y-6">
         {resultsByCase.map(({ testCase, results }) => (
           <div key={testCase.id} className="border rounded-lg p-4">
