@@ -74,6 +74,8 @@ export async function GET(request: NextRequest) {
         completedAt: job.completedAt,
         current: job.current,
         error: job.error,
+        // 如果任务已完成，直接返回结果，避免额外的请求
+        results: (job.status === 'COMPLETED' || job.status === 'FAILED') ? job.results : undefined,
       },
     });
   } catch (error: any) {

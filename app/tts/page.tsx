@@ -227,10 +227,22 @@ export default function TTSPage() {
         if (progress) {
           setTtsProgress(progress);
           if (progress.status === 'COMPLETED' || progress.status === 'FAILED') {
-            const resultResp = await fetch(`/api/tts/result?jobId=${encodeURIComponent(jobId)}`);
-            if (resultResp.ok) {
-              const resultJson = await resultResp.json();
-              setResults(resultJson?.data?.results || []);
+            // 优先使用进度响应中直接返回的结果（避免额外的请求和时序问题）
+            if (progress.results !== undefined) {
+              setResults(progress.results || []);
+            } else {
+              // 兜底：如果进度响应中没有结果，尝试从 result API 获取
+              try {
+                const resultResp = await fetch(`/api/tts/result?jobId=${encodeURIComponent(jobId)}`);
+                if (resultResp.ok) {
+                  const resultJson = await resultResp.json();
+                  setResults(resultJson?.data?.results || []);
+                } else {
+                  console.warn('获取结果失败:', resultResp.status, resultResp.statusText);
+                }
+              } catch (error) {
+                console.error('获取结果异常:', error);
+              }
             }
             setLoading(false);
             return true;
