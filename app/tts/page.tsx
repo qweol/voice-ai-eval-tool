@@ -763,7 +763,7 @@ export default function TTSPage() {
                               key={`${group.provider}-success-${runIdx}`}
                               className="p-4 flex flex-col gap-4 lg:flex-row lg:items-center"
                             >
-                              <div className="flex-1">
+                              <div className="flex-[3] min-w-0">
                                 <div className="text-sm font-bold text-foreground mb-2">
                                   第 {displayIndex} 次
                                 </div>
@@ -776,19 +776,21 @@ export default function TTSPage() {
                         />
                       </div>
                               </div>
-                              <div className="flex-[1.5] flex flex-wrap gap-4 text-sm text-mutedForeground">
-                                <span>首token: <span className="font-bold text-foreground">{run.ttfb != null ? `${run.ttfb}ms` : '-'}</span></span>
-                                <span>总耗时: <span className="font-bold text-foreground">{run.totalTime != null ? `${run.totalTime}ms` : '-'}</span></span>
-                                <span>成本: <span className="font-bold text-foreground">{typeof run.cost === 'number' ? `$${run.cost.toFixed(4)}` : '-'}</span></span>
-                              </div>
+                              <div className="flex flex-col gap-2 items-end lg:items-start flex-shrink-0">
+                                <div className="flex flex-row gap-3 text-xs text-mutedForeground">
+                                  <span>首token: <span className="font-bold text-foreground">{run.ttfb != null ? `${run.ttfb}ms` : '-'}</span></span>
+                                  <span>总耗时: <span className="font-bold text-foreground">{run.totalTime != null ? `${run.totalTime}ms` : '-'}</span></span>
+                                  <span>成本: <span className="font-bold text-foreground">{typeof run.cost === 'number' ? `$${run.cost.toFixed(4)}` : '-'}</span></span>
+                                </div>
                         <Button
                                 onClick={() => handleMarkAsBadCaseSingle(run)}
                           variant="secondary"
-                                className="text-sm flex-shrink-0 self-start lg:self-center"
+                                className="text-sm flex-shrink-0 mt-2"
                         >
                           <Tag size={14} strokeWidth={2.5} className="mr-2" />
                           标记为 BadCase
                         </Button>
+                              </div>
                       </div>
                           );
                         })}
