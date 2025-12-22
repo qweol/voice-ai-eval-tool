@@ -231,7 +231,7 @@ export async function callGenericASR(
     // Qwen风格：ASR使用专门的语音识别端点
     if (config.templateType === 'qwen') {
       // Qwen ASR 使用 /services/audio/asr/recognition 端点
-      apiUrl = 'https://dashscope.aliyuncs.com/api/v1/services/audio/asr/recognition';
+      apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/asr/recognition';
     }
 
     // 3. OpenAI风格使用multipart/form-data，其他使用JSON

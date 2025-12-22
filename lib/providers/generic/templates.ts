@@ -190,7 +190,7 @@ export const qwenTemplate: APITemplate = {
   id: 'qwen',
   name: 'Qwen风格',
   description: '适用于阿里云通义千问ASR/TTS服务，包括Qwen3-TTS',
-  defaultApiUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
+  defaultApiUrl: 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation',
   defaultMethod: 'POST',
   authType: 'bearer', // DashScope 使用 Bearer Token 认证
   isBuiltin: true,

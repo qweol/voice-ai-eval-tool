@@ -38,7 +38,7 @@ export function CardHeader({ children, icon, badge }: CardHeaderProps) {
           {badge}
         </div>
       )}
-      <h3 className="text-2xl font-heading font-bold text-foreground">{children}</h3>
+      <div className="text-2xl font-heading font-bold text-foreground">{children}</div>
     </div>
   );
 }
