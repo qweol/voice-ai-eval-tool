@@ -33,7 +33,7 @@ services:
       - ./public/audio:/app/public/audio
     depends_on:
       - mysql
-    command: sh -c "node node_modules/.bin/prisma migrate deploy && node server.js"
+    command: sh -c "node_modules/.bin/prisma migrate deploy && node server.js"
 
 volumes:
   mysql_data:
