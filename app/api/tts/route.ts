@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
 
           // 保存音频文件（批量下避免文件名冲突）
           const rand = Math.random().toString(36).slice(2, 8);
-          const filename = `${providerCall.id}_${Date.now()}_${runIndex}_${rand}.mp3`;
+          const filename = `${providerCall.id}_${Date.now()}_${runIndex}_${rand}.wav`;
           const filepath = path.join(audioDir, filename);
 
           if (result.audioBuffer && result.audioBuffer.length > 0) {

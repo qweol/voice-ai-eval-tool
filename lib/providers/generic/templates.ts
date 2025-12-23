@@ -53,7 +53,7 @@ const openaiModels: ModelDefinition[] = [
     description: '最新的TTS模型，支持提示词控制语音特征（口音、情感、语调等）',
     type: 'tts',
     voices: openaiVoices,
-    supportedFormats: ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'],
+    supportedFormats: ['wav', 'pcm'],
     speedRange: [0.25, 4.0],
   },
   {
@@ -62,7 +62,7 @@ const openaiModels: ModelDefinition[] = [
     description: '标准TTS模型，低延迟，适合实时场景',
     type: 'tts',
     voices: openaiStandardVoices,
-    supportedFormats: ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'],
+    supportedFormats: ['wav', 'pcm'],
     speedRange: [0.25, 4.0],
   },
   {
@@ -71,7 +71,7 @@ const openaiModels: ModelDefinition[] = [
     description: '高质量TTS模型，音质更好',
     type: 'tts',
     voices: openaiStandardVoices,
-    supportedFormats: ['mp3', 'opus', 'aac', 'flac', 'wav', 'pcm'],
+    supportedFormats: ['wav', 'pcm'],
     speedRange: [0.25, 4.0],
   },
 ];
@@ -99,7 +99,7 @@ export const openaiTemplate: APITemplate = {
   "model": "{model}",
   "input": "{text}",
   "voice": "{voice}",
-  "response_format": "mp3",
+  "response_format": "wav",
   "speed": {speed}
 }`,
   },
@@ -173,7 +173,7 @@ const qwenModels: ModelDefinition[] = [
     description: 'Qwen3-TTS 模型，低延迟（首包延迟97ms），支持流式输出，提供49种音色。注意：DashScope API中只有此模型可用',
     type: 'tts',
     voices: qwen3FlashVoices,
-    supportedFormats: ['mp3', 'wav', 'pcm'],
+    supportedFormats: ['wav', 'pcm'],
     speedRange: [0.5, 2.0],
   },
 ];
@@ -286,7 +286,7 @@ const cartesiaModels: ModelDefinition[] = [
     description: 'Latest Sonic model with improved quality and naturalness',
     type: 'tts',
     voices: cartesiaVoices,
-    supportedFormats: ['wav', 'pcm', 'mp3', 'flac', 'mulaw'],
+    supportedFormats: ['wav', 'pcm'],
     speedRange: [0.5, 2.0],
   },
   {
@@ -295,7 +295,7 @@ const cartesiaModels: ModelDefinition[] = [
     description: 'Optimized for English language synthesis',
     type: 'tts',
     voices: cartesiaVoices,
-    supportedFormats: ['wav', 'pcm', 'mp3', 'flac', 'mulaw'],
+    supportedFormats: ['wav', 'pcm'],
     speedRange: [0.5, 2.0],
   },
   {
@@ -304,7 +304,7 @@ const cartesiaModels: ModelDefinition[] = [
     description: 'Supports multiple languages',
     type: 'tts',
     voices: cartesiaVoices,
-    supportedFormats: ['wav', 'pcm', 'mp3', 'flac', 'mulaw'],
+    supportedFormats: ['wav', 'pcm'],
     speedRange: [0.5, 2.0],
   },
 ];
@@ -376,8 +376,8 @@ export const cartesiaTemplate: APITemplate = {
         id: '{voice}',
       },
       output_format: {
-        container: 'mp3',
-        encoding: 'mp3',
+        container: 'wav',
+        encoding: 'pcm_s16le',
         sample_rate: 44100,
       },
       language: '{language}',
@@ -528,7 +528,7 @@ const minimaxModels: ModelDefinition[] = [
     description: '拥有出色的韵律和稳定性，小语种能力加强，性能表现出色',
     type: 'tts',
     voices: minimaxVoices,
-    supportedFormats: ['mp3', 'wav', 'flac'],
+    supportedFormats: ['wav'],
     speedRange: [0.5, 2.0],
   },
 ];
@@ -571,8 +571,8 @@ export const minimaxTemplate: APITemplate = {
           speed_ratio: '{speed}',
           pitch_ratio: 1.0,
           volume_ratio: 1.0,
-          encoding: 'mp3',
-          sample_rate: 24000,
+          encoding: 'wav',
+          sample_rate: 32000,
         },
       },
     }, null, 2),

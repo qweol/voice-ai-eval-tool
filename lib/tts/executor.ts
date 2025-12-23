@@ -31,12 +31,7 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
   const { text, options, providerVoices, providers } = payload;
   const batchCount = safeBatchCount(payload.batchCount);
 
-  console.log(`[TTS Executor] 开始执行任务: jobId=${jobId}, batchCount=${batchCount}`);
-  const updateResult = updateTtsJob(jobId, { status: 'RUNNING', current: { provider: undefined, runIndex: undefined } });
-  if (!updateResult) {
-    console.error(`[TTS Executor] 警告: 无法更新任务状态，jobId=${jobId} 可能不存在`);
-    return;
-  }
+  updateTtsJob(jobId, { status: 'RUNNING', current: { provider: undefined, runIndex: undefined } });
 
   // 确保音频目录存在（可通过环境变量配置）
   const audioDir = process.env.AUDIO_STORAGE_DIR || path.join(process.cwd(), 'public', 'audio');
@@ -113,7 +108,7 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
 
           // 保存音频文件（批量下避免文件名冲突）
           const rand = Math.random().toString(36).slice(2, 8);
-          const filename = `${providerCall.id}_${Date.now()}_${runIndex}_${rand}.mp3`;
+          const filename = `${providerCall.id}_${Date.now()}_${runIndex}_${rand}.wav`;
           const filepath = path.join(audioDir, filename);
 
           if (result.audioBuffer && result.audioBuffer.length > 0) {

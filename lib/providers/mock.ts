@@ -53,6 +53,6 @@ export async function mockSynthesize(
   return {
     audioBuffer: Buffer.from([]),
     duration,
-    format: 'mp3',
+    format: 'wav',
   };
 }

@@ -459,7 +459,8 @@ export async function callGenericTTS(
       speed: options?.speed !== undefined ? options.speed : 1.0,
       language: language,
       language_type: languageType, // Qwen3-TTS 需要的语言类型
-      format: 'mp3', // 默认格式
+      format: 'wav', // 统一使用 WAV 格式
+      sample_rate: 32000, // 统一使用 32kHz 采样率
     };
 
     // Cartesia 特殊处理：添加 transcription_speed 参数
@@ -591,7 +592,7 @@ export async function callGenericTTS(
         model: modelId,
         input: text,
         voice: voiceId,
-        response_format: 'mp3',
+        response_format: 'wav',
         speed: variables.speed,
       };
     }
@@ -801,7 +802,7 @@ export async function callGenericTTS(
       duration,
       ttfb,
       totalTime,
-      format: 'mp3', // 默认格式，实际应该从响应或配置中获取
+      format: 'wav', // 统一使用 WAV 格式
       modelId,
       characterCount,
     };
@@ -885,8 +886,8 @@ export async function callMinimaxTTS(
               speed_ratio: options?.speed || 1.0,
               pitch_ratio: 1.0,
               volume_ratio: 1.0,
-              encoding: 'mp3',
-              sample_rate: 24000,
+              encoding: 'wav',
+              sample_rate: 32000,
             },
           },
         };
@@ -957,7 +958,7 @@ export async function callMinimaxTTS(
             duration,
             ttfb: ttfbValue,
             totalTime,
-            format: 'mp3',
+            format: 'wav',
             modelId,
             characterCount: Math.min(originalCharacterCount, 300),
           });

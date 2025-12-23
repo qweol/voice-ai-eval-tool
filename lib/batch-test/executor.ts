@@ -125,7 +125,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             const endToEndDurationSeconds = endToEndTime / 1000;
 
             // 保存音频文件
-            const audioFileName = `${batchId}_${testCase.id}_${providerIdStr}_${Date.now()}.mp3`;
+            const audioFileName = `${batchId}_${testCase.id}_${providerIdStr}_${Date.now()}.wav`;
             const audioDir =
               process.env.AUDIO_STORAGE_DIR ||
               path.join(process.cwd(), 'public', 'audio');
@@ -186,7 +186,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
                 ttfb: result.ttfb,
                 totalTime: endToEndTime,
                 technicalParams: {
-                  format: result.format || 'mp3',
+                  format: result.format || 'wav',
                   fileSize: result.audioBuffer.length,
                   providerLatencyMs: result.totalTime,
                   providerDurationSeconds: result.duration,
@@ -201,7 +201,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
                 ttfb: result.ttfb,
                 totalTime: endToEndTime,
                 technicalParams: {
-                  format: result.format || 'mp3',
+                  format: result.format || 'wav',
                   fileSize: result.audioBuffer.length,
                   providerLatencyMs: result.totalTime,
                   providerDurationSeconds: result.duration,
