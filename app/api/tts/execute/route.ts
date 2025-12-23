@@ -54,6 +54,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'jobId 不能为空' }, { status: 400 });
     }
 
+    const cursorRaw = request.nextUrl.searchParams.get('cursor');
+    const cursor = cursorRaw ? Math.max(0, Math.trunc(Number(cursorRaw))) : 0;
+    const full = request.nextUrl.searchParams.get('full') === '1';
+
     console.log(`[TTS Execute GET] 查询 jobId=${jobId}, Map.size=${ttsJobs.size}, keys=[${Array.from(ttsJobs.keys()).join(', ')}]`);
 
     const job = getTtsJob(jobId);
@@ -61,6 +65,12 @@ export async function GET(request: NextRequest) {
       console.warn(`[TTS Execute GET] 任务不存在: jobId=${jobId}`);
       return NextResponse.json({ success: false, error: '任务不存在或已过期' }, { status: 404 });
     }
+
+    const resultsCount = Array.isArray(job.results) ? job.results.length : 0;
+    const safeCursor = Number.isFinite(cursor) ? Math.min(cursor, resultsCount) : 0;
+    const resultsDelta = Array.isArray(job.results) ? job.results.slice(safeCursor) : [];
+    const nextCursor = resultsCount;
+    const shouldReturnFullResults = full || job.status === 'COMPLETED' || job.status === 'FAILED';
 
     return NextResponse.json({
       success: true,
@@ -74,8 +84,11 @@ export async function GET(request: NextRequest) {
         completedAt: job.completedAt,
         current: job.current,
         error: job.error,
-        // 如果任务已完成，直接返回结果，避免额外的请求
-        results: (job.status === 'COMPLETED' || job.status === 'FAILED') ? job.results : undefined,
+        results: shouldReturnFullResults ? job.results : undefined,
+        resultsDelta: shouldReturnFullResults ? undefined : resultsDelta,
+        resultsCount,
+        cursor: safeCursor,
+        nextCursor,
       },
     });
   } catch (error: any) {

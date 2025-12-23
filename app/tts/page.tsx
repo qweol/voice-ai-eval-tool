@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Play, Tag } from 'lucide-react';
 import { getConfig, getAllEnabledProvidersWithSystem, createBadCase } from '@/lib/utils/config';
-import { GenericProviderConfig, VoiceDefinition } from '@/lib/providers/generic/types';
+import { GenericProviderConfig, VoiceDefinition, ModelDefinition } from '@/lib/providers/generic/types';
 import { templates } from '@/lib/providers/generic/templates';
 import { BadCaseStatus, BadCaseSeverity } from '@/lib/types';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
@@ -46,6 +46,7 @@ interface ProviderVoice {
   providerId: string;
   voice: string;
   enabled: boolean;
+  modelId?: string; // 添加模型ID字段
 }
 
 interface StatSummary {
@@ -156,6 +157,7 @@ export default function TTSPage() {
       const voices = ttsProviders.map((p) => {
         // 获取Provider配置的音色，如果没有则使用默认音色
         let defaultVoice = p.selectedVoice || '';
+        let defaultModelId = p.selectedModels?.tts || '';
 
         // 如果Provider没有配置音色，尝试从模板获取默认音色
         if (!defaultVoice && p.templateType) {
@@ -174,6 +176,7 @@ export default function TTSPage() {
           providerId: p.id,
           voice: defaultVoice || 'alloy',
           enabled: true,
+          modelId: defaultModelId,
         };
       });
 
@@ -219,6 +222,49 @@ export default function TTSPage() {
     );
   };
 
+  const updateProviderModel = (providerId: string, modelId: string) => {
+    setProviderVoices((prev) =>
+      prev.map((pv) => {
+        if (pv.providerId === providerId) {
+          // 切换模型时，需要重置音色为新模型的第一个音色
+          const provider = enabledProviders.find(p => p.id === providerId);
+          let newVoice = pv.voice;
+
+          if (provider?.templateType) {
+            const template = templates[provider.templateType];
+            if (template.models) {
+              const ttsModel = template.models.find(
+                m => m.type === 'tts' && m.id === modelId
+              );
+              if (ttsModel?.voices && ttsModel.voices.length > 0) {
+                newVoice = ttsModel.voices[0].id;
+              }
+            }
+          }
+
+          return { ...pv, modelId, voice: newVoice };
+        }
+        return pv;
+      })
+    );
+
+    // 同时更新 enabledProviders 中的 selectedModels
+    setEnabledProviders((prev) =>
+      prev.map((p) => {
+        if (p.id === providerId) {
+          return {
+            ...p,
+            selectedModels: {
+              ...p.selectedModels,
+              tts: modelId,
+            },
+          };
+        }
+        return p;
+      })
+    );
+  };
+
   const toggleProvider = (providerId: string) => {
     setProviderVoices((prev) =>
       prev.map((pv) => {
@@ -240,11 +286,8 @@ export default function TTSPage() {
     setTtsProgress(null);
 
     try {
-      // 获取所有启用的供应商（包括系统预置）
-      const allProviders = await getAllEnabledProvidersWithSystem();
-      const providers = allProviders.filter(
-        (p) => p.serviceType === 'tts' || p.serviceType === 'both'
-      );
+      // 使用 enabledProviders 状态，它包含了 UI 中更新的模型选择
+      const providers = enabledProviders;
       const runBatchCount = opts?.batchCount ?? 1;
       const selectedProviderVoices = providerVoices.filter((pv) => pv.enabled);
       setLastRunConfig({
@@ -656,6 +699,14 @@ export default function TTSPage() {
 
                 if (!pv) return null;
 
+                // 获取该Provider可用的TTS模型列表
+                const getAvailableTtsModels = (): ModelDefinition[] => {
+                  if (!provider.templateType) return [];
+                  const template = templates[provider.templateType];
+                  if (!template.models) return [];
+                  return template.models.filter(m => m.type === 'tts');
+                };
+
                 // 获取该Provider可用的音色列表
                 const getAvailableVoices = (): VoiceDefinition[] => {
                   // 对于 Minimax，优先使用从 API 获取的音色列表
@@ -674,14 +725,18 @@ export default function TTSPage() {
                   const template = templates[provider.templateType];
                   if (!template.models) return [];
 
+                  // 使用当前选中的模型ID（优先使用 pv.modelId，其次使用 provider.selectedModels?.tts）
+                  const currentModelId = pv.modelId || provider.selectedModels?.tts;
                   const ttsModel = template.models.find(
-                    m => m.type === 'tts' && m.id === provider.selectedModels?.tts
+                    m => m.type === 'tts' && m.id === currentModelId
                   );
 
                   return ttsModel?.voices || [];
                 };
 
+                const availableTtsModels = getAvailableTtsModels();
                 const availableVoices = getAvailableVoices();
+                const currentModelId = pv.modelId || provider.selectedModels?.tts;
 
                 return (
                   <Card key={provider.id} featured={false} hover={false} className="mb-3">
@@ -699,33 +754,54 @@ export default function TTSPage() {
                             <span className="text-xs px-2 py-0.5 bg-accent text-accentForeground rounded-full font-bold">
                               {provider.templateType || 'custom'}
                             </span>
-                            {provider.selectedModels?.tts && (
-                              <span className="text-xs px-2 py-0.5 bg-quaternary text-white rounded-full font-bold">
-                                {provider.selectedModels.tts}
-                              </span>
-                            )}
                           </div>
                         </div>
                       </label>
                       {pv.enabled && (
-                        <div className="flex-1 min-w-[200px]">
-                          {availableVoices.length > 0 ? (
-                            <select
-                              value={pv.voice}
-                              onChange={(e) => updateProviderVoice(provider.id, e.target.value)}
-                              className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
-                            >
-                              {availableVoices.map(voice => (
-                                <option key={voice.id} value={voice.id}>
-                                  {voice.name} ({voice.gender}) {voice.description ? `- ${voice.description}` : ''}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <div className="text-sm text-mutedForeground italic">
-                              未配置模型或模型不支持音色选择
+                        <div className="flex-1 flex flex-row gap-3 min-w-[400px] flex-wrap">
+                          {/* 模型选择 */}
+                          {availableTtsModels.length > 0 && (
+                            <div className="flex-1 min-w-[180px]">
+                              <label className="block text-xs font-bold uppercase tracking-wide text-mutedForeground mb-2">
+                                模型
+                              </label>
+                              <select
+                                value={currentModelId}
+                                onChange={(e) => updateProviderModel(provider.id, e.target.value)}
+                                className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
+                              >
+                                {availableTtsModels.map(model => (
+                                  <option key={model.id} value={model.id}>
+                                    {model.name} {model.description ? `- ${model.description}` : ''}
+                                  </option>
+                                ))}
+                              </select>
                             </div>
                           )}
+
+                          {/* 音色选择 */}
+                          <div className="flex-1 min-w-[180px]">
+                            <label className="block text-xs font-bold uppercase tracking-wide text-mutedForeground mb-2">
+                              音色
+                            </label>
+                            {availableVoices.length > 0 ? (
+                              <select
+                                value={pv.voice}
+                                onChange={(e) => updateProviderVoice(provider.id, e.target.value)}
+                                className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
+                              >
+                                {availableVoices.map(voice => (
+                                  <option key={voice.id} value={voice.id}>
+                                    {voice.name} ({voice.gender}) {voice.description ? `- ${voice.description}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="text-sm text-mutedForeground italic">
+                                未配置模型或模型不支持音色选择
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>

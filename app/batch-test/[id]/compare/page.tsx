@@ -29,10 +29,33 @@ export default function ComparePage() {
   const [report, setReport] = useState<ComparisonReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [comparing, setComparing] = useState(false);
+  const [currentBatch, setCurrentBatch] = useState<any>(null);
 
   useEffect(() => {
     loadBaselines();
+    loadCurrentBatch();
   }, [batchId]);
+
+  const loadCurrentBatch = async () => {
+    try {
+      const response = await fetch(`/api/batch-test/${batchId}`);
+      const result = await response.json();
+      if (result.success) {
+        setCurrentBatch(result.data);
+      }
+    } catch (error) {
+      console.error('加载当前批次失败:', error);
+    }
+  };
+
+  // 从批次配置中获取供应商名称
+  const getProviderName = (providerId: string): string => {
+    if (!currentBatch) return providerId;
+    const batchConfig = currentBatch.config as any;
+    const providerConfigs = batchConfig?.providerConfigs || {};
+    const providerConfig = providerConfigs[providerId];
+    return providerConfig?.name || providerId;
+  };
 
   const loadBaselines = async () => {
     try {
@@ -352,7 +375,7 @@ export default function ComparePage() {
                               {comparison.testCaseText}
                             </div>
                             <div className="text-xs text-gray-600">
-                              供应商: {comparison.provider} | TTFB变化:{' '}
+                              供应商: {getProviderName(comparison.provider)} | TTFB变化:{' '}
                               {comparison.ttfbChange != null ? (
                                 <>
                                   {comparison.ttfbChange > 0 ? '+' : ''}

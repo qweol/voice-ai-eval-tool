@@ -496,6 +496,15 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
     results: batch.results.filter((r) => r.testCaseId === testCase.id),
   }));
 
+  // 从批次配置中获取供应商名称
+  const getProviderName = (providerId: string): string => {
+    const batchConfig = batch.config as any;
+    const providerConfigs = batchConfig?.providerConfigs || {};
+    const providerConfig = providerConfigs[providerId];
+    // 如果找到配置且有名称，使用名称；否则使用 ID
+    return providerConfig?.name || providerId;
+  };
+
   const handleMarkAsBadCase = (testCase: TestCase, result: TestResult) => {
     setSelectedResult({ testCase, result });
     setShowBadCaseModal(true);
@@ -598,7 +607,7 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
               {results.map((result) => (
                 <div key={result.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded">
                   <div className="flex-1">
-                    <div className="font-medium text-gray-700">{result.provider}</div>
+                    <div className="font-medium text-gray-700">{getProviderName(result.provider)}</div>
                     {result.status === 'SUCCESS' ? (
                       <div className="text-sm text-gray-600">
                         首token: {result.ttfb != null ? `${result.ttfb}ms` : '-'} | 总耗时: {result.totalTime != null ? `${result.totalTime}ms` : '-'} | 成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
@@ -628,6 +637,7 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
 
       {showBadCaseModal && selectedResult && (
         <BadCaseModal
+          batch={batch}
           testCase={selectedResult.testCase}
           result={selectedResult.result}
           onClose={() => {
@@ -948,11 +958,13 @@ function ProviderModal({
 }
 
 function BadCaseModal({
+  batch,
   testCase,
   result,
   onClose,
   onSuccess,
 }: {
+  batch: BatchTest;
   testCase: TestCase;
   result: TestResult;
   onClose: () => void;
@@ -1021,7 +1033,14 @@ function BadCaseModal({
           {/* 供应商 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">供应商</label>
-            <div className="px-4 py-2 bg-gray-50 rounded-lg text-gray-800">{result.provider}</div>
+            <div className="px-4 py-2 bg-gray-50 rounded-lg text-gray-800">
+              {(() => {
+                const batchConfig = batch.config as any;
+                const providerConfigs = batchConfig?.providerConfigs || {};
+                const providerConfig = providerConfigs[result.provider];
+                return providerConfig?.name || result.provider;
+              })()}
+            </div>
           </div>
 
           {/* 音频播放 */}

@@ -170,7 +170,6 @@ const qwenModels: ModelDefinition[] = [
   {
     id: 'qwen3-tts-flash',
     name: 'Qwen3-TTS Flash',
-    description: 'Qwen3-TTS 模型，低延迟（首包延迟97ms），支持流式输出，提供49种音色。注意：DashScope API中只有此模型可用',
     type: 'tts',
     voices: qwen3FlashVoices,
     supportedFormats: ['wav', 'pcm'],
