@@ -460,7 +460,7 @@ export async function callGenericTTS(
       language: language,
       language_type: languageType, // Qwen3-TTS 需要的语言类型
       format: 'wav', // 统一使用 WAV 格式
-      sample_rate: 32000, // 统一使用 32kHz 采样率
+      sample_rate: 24000, // 统一使用 24kHz 采样率
     };
 
     // Cartesia 特殊处理：添加 transcription_speed 参数
@@ -887,7 +887,7 @@ export async function callMinimaxTTS(
               pitch_ratio: 1.0,
               volume_ratio: 1.0,
               encoding: 'wav',
-              sample_rate: 32000,
+              sample_rate: 24000,
             },
           },
         };

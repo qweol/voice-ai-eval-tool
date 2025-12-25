@@ -100,7 +100,8 @@ export const openaiTemplate: APITemplate = {
   "input": "{text}",
   "voice": "{voice}",
   "response_format": "wav",
-  "speed": {speed}
+  "speed": {speed},
+  "sample_rate": {sample_rate}
 }`,
   },
   responseTextPath: 'text',
@@ -377,7 +378,7 @@ export const cartesiaTemplate: APITemplate = {
       output_format: {
         container: 'wav',
         encoding: 'pcm_s16le',
-        sample_rate: 44100,
+        sample_rate: 24000,
       },
       language: '{language}',
       speed: '{speed}',
@@ -571,7 +572,7 @@ export const minimaxTemplate: APITemplate = {
           pitch_ratio: 1.0,
           volume_ratio: 1.0,
           encoding: 'wav',
-          sample_rate: 32000,
+          sample_rate: 24000,
         },
       },
     }, null, 2),
