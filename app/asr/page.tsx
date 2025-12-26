@@ -2,11 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Upload, Play } from 'lucide-react';
+import { ArrowLeft, Upload, Play, Database } from 'lucide-react';
 import { getConfig, getAllEnabledProvidersWithSystem } from '@/lib/utils/config';
 import { GenericProviderConfig } from '@/lib/providers/generic/types';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import SampleLibraryModal from '@/components/asr/SampleLibraryModal';
+import { AsrSample } from '@/components/asr/SampleLibrary';
 
 interface ASRResult {
   provider: string;
@@ -25,6 +27,8 @@ export default function ASRPage() {
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
   const [language, setLanguage] = useState('zh');
   const [format, setFormat] = useState('wav');
+  const [showSampleLibrary, setShowSampleLibrary] = useState(false);
+  const [selectedSample, setSelectedSample] = useState<AsrSample | null>(null);
 
   useEffect(() => {
     const config = getConfig();
@@ -50,10 +54,26 @@ export default function ASRPage() {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
-      // 创建本地预览 URL
+      setSelectedSample(null);
       const url = URL.createObjectURL(selectedFile);
       setAudioUrl(url);
     }
+  };
+
+  // 处理样本选择
+  const handleSelectSample = async (sample: AsrSample) => {
+    setSelectedSample(sample);
+    setFile(null);
+    setAudioUrl(`/api/storage/audio/${sample.filename}`);
+    setLanguage(sample.language);
+
+    // 获取样本文件
+    const audioRes = await fetch(`/api/storage/audio/${sample.filename}`);
+    const audioBlob = await audioRes.blob();
+    const audioFile = new File([audioBlob], sample.originalName, {
+      type: `audio/${sample.format}`
+    });
+    setFile(audioFile);
   };
 
   const toggleProvider = (providerId: string) => {
@@ -122,7 +142,16 @@ export default function ASRPage() {
         {/* 文件上传区域 */}
         <Card className="mb-8" hover={false}>
           <CardHeader>
-            <h2 className="text-2xl font-heading font-bold">上传音频文件</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-heading font-bold">上传音频文件</h2>
+              <Button
+                onClick={() => setShowSampleLibrary(true)}
+                showArrow={false}
+              >
+                <Database size={18} className="mr-2" />
+                样本库
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
           <div className="flex items-center gap-4 mb-4">
@@ -323,6 +352,13 @@ export default function ASRPage() {
           </Card>
         )}
       </div>
+
+      {/* 样本库模态框 */}
+      <SampleLibraryModal
+        isOpen={showSampleLibrary}
+        onClose={() => setShowSampleLibrary(false)}
+        onSelectSample={handleSelectSample}
+      />
     </div>
   );
 }

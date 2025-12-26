@@ -23,7 +23,7 @@ export async function GET(
 
     const audioDir =
       process.env.AUDIO_STORAGE_DIR ||
-      path.join(process.cwd(), 'public', 'audio');
+      path.join(process.cwd(), 'storage', 'audio');
     const audioPath = path.join(audioDir, filename);
 
     // 检查文件是否存在

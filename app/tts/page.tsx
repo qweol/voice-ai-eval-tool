@@ -72,46 +72,6 @@ interface ProviderGroup {
   };
 }
 
-type TtsExportReportV1 = {
-  reportVersion: 1;
-  generatedAt: string;
-  input: {
-    text: string;
-    textLength: number;
-  };
-  config: {
-    speed: number;
-    batchCount: number;
-  };
-  providersSnapshot: Array<{
-    providerId: string;
-    providerName: string;
-    templateType?: string;
-    modelId?: string;
-    voice?: string;
-    enabled: boolean;
-  }>;
-  summary: {
-    providerCount: number;
-    successCount: number;
-    failedCount: number;
-    totalCost: number;
-    hasEstimated: boolean;
-    byProvider: Array<{
-      provider: string;
-      providerId?: string;
-      modelId?: string;
-      voice?: string;
-      templateType?: string;
-      runs: number;
-      successCount: number;
-      failedCount: number;
-      stats: ProviderGroup['stats'];
-    }>;
-  };
-  runs: TTSResult[];
-};
-
 export default function TTSPage() {
   const router = useRouter();
   const [text, setText] = useState('');
@@ -500,6 +460,415 @@ export default function TTSPage() {
   const formatCost = (value: number | undefined | null) =>
     typeof value === 'number' ? `$${value.toFixed(4)}` : '-';
 
+  const generateHtmlReport = (params: {
+    text: string;
+    speed: number;
+    batchCount: number;
+    groupedResults: ProviderGroup[];
+    summaryMetrics: {
+      providerCount: number;
+      successCount: number;
+      failedCount: number;
+      totalCost: number;
+      hasEstimated: boolean;
+    };
+    audioBase64Map: Record<string, string>;
+    formatMs: (value: number | undefined | null) => string;
+    formatCost: (value: number | undefined | null) => string;
+  }) => {
+    const { text, speed, batchCount, groupedResults, summaryMetrics, audioBase64Map, formatMs, formatCost } = params;
+    const generatedAt = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
+
+    return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTS 测试报告 - ${generatedAt}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f9fafb;
+      color: #111827;
+      line-height: 1.6;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      color: #111827;
+    }
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: #111827;
+    }
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: #111827;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .header {
+      margin-bottom: 2rem;
+    }
+    .meta {
+      color: #6b7280;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .config-item {
+      padding: 1rem;
+      background: #f3f4f6;
+      border-radius: 8px;
+    }
+    .config-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #6b7280;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .config-value {
+      font-size: 1.125rem;
+      font-weight: 700;
+      color: #111827;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .stat-item {
+      padding: 1rem;
+      background: #fef3c7;
+      border: 2px solid #fbbf24;
+      border-radius: 8px;
+    }
+    .stat-label {
+      font-size: 0.875rem;
+      color: #92400e;
+      margin-bottom: 0.25rem;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #111827;
+    }
+    .provider-card {
+      background: white;
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .provider-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .provider-name {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #111827;
+    }
+    .provider-meta {
+      font-size: 0.875rem;
+      color: #6b7280;
+      margin-top: 0.5rem;
+    }
+    .metrics-grid {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .metric-box {
+      padding: 0.75rem 1rem;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      min-width: 220px;
+    }
+    .metric-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: #6b7280;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .metric-value {
+      font-size: 0.875rem;
+      color: #111827;
+    }
+    .details {
+      margin-top: 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .details-summary {
+      padding: 0.75rem 1rem;
+      background: #f9fafb;
+      cursor: pointer;
+      font-weight: 600;
+      user-select: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .details-summary:hover {
+      background: #f3f4f6;
+    }
+    .details-content {
+      display: none;
+    }
+    details[open] .details-content {
+      display: block;
+    }
+    .run-item {
+      padding: 1rem;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .run-item:last-child {
+      border-bottom: none;
+    }
+    .run-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #111827;
+      min-width: 60px;
+    }
+    .audio-player {
+      flex: 1;
+      min-width: 300px;
+    }
+    audio {
+      width: 100%;
+      height: 40px;
+    }
+    .run-metrics {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.75rem;
+      color: #6b7280;
+      flex-wrap: wrap;
+    }
+    .run-metrics span {
+      white-space: nowrap;
+    }
+    .run-metrics strong {
+      color: #111827;
+      font-weight: 600;
+    }
+    .error-item {
+      padding: 1rem;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 0.875rem;
+      font-weight: 500;
+      border-bottom: 1px solid #fecaca;
+    }
+    .error-item:last-child {
+      border-bottom: none;
+    }
+    .text-content {
+      background: #f9fafb;
+      padding: 1rem;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      font-size: 0.875rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .play-all-btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.875rem;
+      margin-bottom: 1rem;
+    }
+    .play-all-btn:hover {
+      background: #2563eb;
+    }
+    @media print {
+      body {
+        padding: 1rem;
+      }
+      .card {
+        box-shadow: none;
+        border: 1px solid #e5e7eb;
+      }
+      .play-all-btn {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>TTS 测试报告</h1>
+      <div class="meta">生成时间: ${generatedAt}</div>
+    </div>
+
+    <div class="card">
+      <h2>测试配置</h2>
+      <div class="config-grid">
+        <div class="config-item">
+          <div class="config-label">测试文本</div>
+          <div class="text-content">${text}</div>
+        </div>
+        <div class="config-item">
+          <div class="config-label">字数</div>
+          <div class="config-value">${text.length}</div>
+        </div>
+        <div class="config-item">
+          <div class="config-label">语速</div>
+          <div class="config-value">${speed.toFixed(1)}x</div>
+        </div>
+        <div class="config-item">
+          <div class="config-label">批量次数</div>
+          <div class="config-value">${batchCount}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>统计信息</h2>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-label">供应商数</div>
+          <div class="stat-value">${summaryMetrics.providerCount}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">成功次数</div>
+          <div class="stat-value">${summaryMetrics.successCount}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">失败次数</div>
+          <div class="stat-value">${summaryMetrics.failedCount}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">总成本</div>
+          <div class="stat-value">$${summaryMetrics.totalCost.toFixed(4)}${summaryMetrics.hasEstimated ? ' (估算)' : ''}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>测试结果</h2>
+      <button class="play-all-btn" onclick="playAllAudios()">▶️ 一键播放全部</button>
+      ${groupedResults.map((group) => `
+        <div class="provider-card">
+          <div class="provider-header">
+            <div>
+              <div class="provider-name">${group.provider}</div>
+              <div class="provider-meta">成功 ${group.successCount} 次 · 失败 ${group.failedCount} 次</div>
+            </div>
+            <div class="metrics-grid">
+              <div class="metric-box">
+                <div class="metric-label">首 Token</div>
+                <div class="metric-value">
+                  ${group.stats.ttfb ? `均值 ${formatMs(group.stats.ttfb.avg)} · 最快 ${formatMs(group.stats.ttfb.min)} · 最慢 ${formatMs(group.stats.ttfb.max)}` : '无成功数据'}
+                </div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-label">总耗时</div>
+                <div class="metric-value">
+                  ${group.stats.totalTime ? `均值 ${formatMs(group.stats.totalTime.avg)} · 最快 ${formatMs(group.stats.totalTime.min)} · 最慢 ${formatMs(group.stats.totalTime.max)}` : '无成功数据'}
+                </div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-label">成本</div>
+                <div class="metric-value">
+                  ${group.stats.cost ? `均值 ${formatCost(group.stats.cost.avg)} · 总计 ${formatCost(group.stats.cost.sum)}` : '无成功数据'}
+                </div>
+              </div>
+            </div>
+          </div>
+          <details class="details">
+            <summary class="details-summary">
+              <span>查看明细（${group.runs.length} 次）</span>
+              <span style="font-size: 0.875rem; color: #6b7280;">点击展开</span>
+            </summary>
+            <div class="details-content">
+              ${group.runs.map((run, runIdx) => {
+                const displayIndex = run.runIndex ?? runIdx + 1;
+                if (run.status !== 'success') {
+                  return `<div class="error-item">第 ${displayIndex} 次失败：${run.error || '合成失败'}</div>`;
+                }
+                const audioSrc = audioBase64Map[run.audioUrl] || run.audioUrl;
+                return `
+                  <div class="run-item">
+                    <div class="run-label">第 ${displayIndex} 次</div>
+                    <div class="audio-player">
+                      <audio controls src="${audioSrc}" data-tts-audio="true"></audio>
+                    </div>
+                    <div class="run-metrics">
+                      <span>首token: <strong>${run.ttfb != null ? `${run.ttfb}ms` : '-'}</strong></span>
+                      <span>总耗时: <strong>${run.totalTime != null ? `${run.totalTime}ms` : '-'}</strong></span>
+                      <span>成本: <strong>${typeof run.cost === 'number' ? `$${run.cost.toFixed(4)}` : '-'}</strong></span>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </details>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+
+  <script>
+    function playAllAudios() {
+      const audios = document.querySelectorAll('audio[data-tts-audio="true"]');
+      audios.forEach((audio, index) => {
+        setTimeout(() => {
+          audio.play();
+        }, index * 3000);
+      });
+    }
+  </script>
+</body>
+</html>`;
+  };
+
   const summaryMetrics = useMemo(() => {
     const successRuns = results.filter(r => r.status === 'success');
     const failedCount = results.filter(r => r.status === 'failed').length;
@@ -515,68 +884,47 @@ export default function TTSPage() {
     };
   }, [groupedResults, results]);
 
-  const exportJsonReport = () => {
+  const exportHtmlReport = async () => {
     if (results.length === 0) return;
 
-    const providersSnapshot = (enabledProviders || []).map((p) => {
-      const pv = providerVoices.find((v) => v.providerId === p.id);
-      return {
-        providerId: p.id,
-        providerName: p.name,
-        templateType: p.templateType,
-        modelId: p.selectedModels?.tts,
-        voice: pv?.voice || p.selectedVoice,
-        enabled: Boolean(pv?.enabled),
-      };
+    // 转换所有音频为 base64
+    const audioBase64Map: Record<string, string> = {};
+    for (const result of results) {
+      if (result.status === 'success' && result.audioUrl) {
+        try {
+          const response = await fetch(result.audioUrl);
+          const blob = await response.blob();
+          const base64 = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          audioBase64Map[result.audioUrl] = base64;
+        } catch (error) {
+          console.error('转换音频失败:', result.audioUrl, error);
+        }
+      }
+    }
+
+    // 生成 HTML 内容
+    const html = generateHtmlReport({
+      text: lastRunConfig?.text ?? text,
+      speed: lastRunConfig?.speed ?? speed,
+      batchCount: lastRunConfig?.batchCount ?? batchCount,
+      groupedResults,
+      summaryMetrics,
+      audioBase64Map,
+      formatMs,
+      formatCost,
     });
 
-    const byProvider = groupedResults.map((g) => {
-      // 尝试从 runs 中补齐 providerId/modelId/voice（如果后端返回了）
-      const first = g.runs.find(r => r.status === 'success') || g.runs[0];
-      return {
-        provider: g.provider,
-        providerId: first?.providerId,
-        modelId: first?.modelId,
-        voice: first?.voice,
-        templateType: first?.templateType,
-        runs: g.runs.length,
-        successCount: g.successCount,
-        failedCount: g.failedCount,
-        stats: g.stats,
-      };
-    });
-
-    const report: TtsExportReportV1 = {
-      reportVersion: 1,
-      generatedAt: new Date().toISOString(),
-      input: {
-        text: lastRunConfig?.text ?? text,
-        textLength: (lastRunConfig?.text ?? text).length,
-      },
-      config: {
-        speed: lastRunConfig?.speed ?? speed,
-        batchCount: lastRunConfig?.batchCount ?? batchCount,
-      },
-      providersSnapshot,
-      summary: {
-        providerCount: summaryMetrics.providerCount,
-        successCount: summaryMetrics.successCount,
-        failedCount: summaryMetrics.failedCount,
-        totalCost: summaryMetrics.totalCost,
-        hasEstimated: summaryMetrics.hasEstimated,
-        byProvider,
-      },
-      runs: results,
-    };
-
-    const pretty = JSON.stringify(report, null, 2);
-    const blob = new Blob([pretty], { type: 'application/json;charset=utf-8' });
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
 
     const pad = (n: number) => String(n).padStart(2, '0');
     const d = new Date();
     const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-    const filename = `tts_compare_report_${ts}.json`;
+    const filename = `tts_report_${ts}.html`;
 
     const a = document.createElement('a');
     a.href = url;
@@ -885,11 +1233,11 @@ export default function TTSPage() {
                   一键播放全部
                 </Button>
                 <Button
-                  onClick={exportJsonReport}
+                  onClick={exportHtmlReport}
                   variant="secondary"
                   className="text-sm"
                 >
-                  导出 JSON 报告
+                  导出 HTML 报告
                 </Button>
                 <Button
                   onClick={handleMarkAllAsBadCase}

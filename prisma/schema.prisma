@@ -153,3 +153,45 @@ model ComparisonReport {
   @@index([createdAt(sort: Desc)])
   @@map("comparison_reports")
 }
+
+// ASR 样本音频表
+model AsrSample {
+  id            String   @id @default(uuid())
+
+  // 样本基本信息
+  name          String   @db.VarChar(255)
+  description   String?  @db.Text
+
+  // 音频文件信息
+  filename      String   @unique @db.VarChar(255)
+  originalName  String   @db.VarChar(255) @map("original_name")
+  fileSize      Int      @map("file_size")
+  duration      Decimal? @db.Decimal(10, 2)
+  format        String   @db.VarChar(20)
+
+  // 音频技术参数
+  sampleRate    Int?     @map("sample_rate")
+  bitRate       Int?     @map("bit_rate")
+  channels      Int?     @default(1)
+
+  // 标签和元数据
+  tags          Json     @default("[]")
+  language      String   @default("zh") @db.VarChar(20)
+
+  // 参考文本
+  referenceText String?  @db.Text @map("reference_text")
+
+  // 使用统计
+  usageCount    Int      @default(0) @map("usage_count")
+  lastUsedAt    DateTime? @map("last_used_at")
+
+  // 元数据
+  uploadedBy    String   @default("system") @db.VarChar(100) @map("uploaded_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([createdAt(sort: Desc)])
+  @@index([language])
+  @@index([usageCount(sort: Desc)])
+  @@map("asr_samples")
+}
