@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // 确保音频目录存在（可通过环境变量配置）
     const audioDir =
       process.env.AUDIO_STORAGE_DIR ||
-      path.join(process.cwd(), 'public', 'audio');
+      path.join(process.cwd(), 'storage', 'audio');
     try {
       await mkdir(audioDir, { recursive: true });
     } catch (error) {

@@ -34,7 +34,7 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
   updateTtsJob(jobId, { status: 'RUNNING', current: { provider: undefined, runIndex: undefined } });
 
   // 确保音频目录存在（可通过环境变量配置）
-  const audioDir = process.env.AUDIO_STORAGE_DIR || path.join(process.cwd(), 'public', 'audio');
+  const audioDir = process.env.AUDIO_STORAGE_DIR || path.join(process.cwd(), 'storage', 'audio');
   await mkdir(audioDir, { recursive: true }).catch(() => undefined);
 
   // 获取启用的提供者

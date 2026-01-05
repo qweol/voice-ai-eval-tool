@@ -128,7 +128,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             const audioFileName = `${batchId}_${testCase.id}_${providerIdStr}_${Date.now()}.wav`;
             const audioDir =
               process.env.AUDIO_STORAGE_DIR ||
-              path.join(process.cwd(), 'public', 'audio');
+              path.join(process.cwd(), 'storage', 'audio');
             const audioPath = path.join(audioDir, audioFileName);
             await fs.mkdir(audioDir, { recursive: true });
             await fs.writeFile(audioPath, result.audioBuffer);
