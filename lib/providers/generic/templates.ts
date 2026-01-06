@@ -273,6 +273,48 @@ const cartesiaVoices: VoiceDefinition[] = [
     gender: 'female',
     language: 'en'
   },
+  {
+    id: 'e07c00bc-4134-4eae-9ea4-1a55fb45746b',
+    name: 'Brooklyn',
+    description: 'Sonic3 voice',
+    gender: 'female',
+    language: 'en'
+  },
+  {
+    id: 'f786b574-daa5-4673-aa0c-cbe3e8534c02',
+    name: 'Katie',
+    description: 'Sonic3 voice',
+    gender: 'female',
+    language: 'en'
+  },
+  {
+    id: '47c38ca4-5f35-497b-b1a3-415245fb35e1',
+    name: 'Daniel',
+    description: 'Sonic3 modern assistant voice',
+    gender: 'male',
+    language: 'en'
+  },
+  {
+    id: 'a01c369f-6d2d-4185-bc20-b32c225eab70',
+    name: 'Fiona',
+    description: 'Sonic3 voice',
+    gender: 'female',
+    language: 'en'
+  },
+  {
+    id: 'e8e5fffb-252c-436d-b842-8879b84445b6',
+    name: 'Casey',
+    description: 'Sonic3 voice',
+    gender: 'female',
+    language: 'en'
+  },
+  {
+    id: '9626c31c-bec5-4cca-baa8-f8ba9e84c8bc',
+    name: 'Jacqueline',
+    description: 'Sonic3 voice',
+    gender: 'female',
+    language: 'en'
+  },
 ];
 
 /**
@@ -381,7 +423,9 @@ export const cartesiaTemplate: APITemplate = {
         sample_rate: 24000,
       },
       language: '{language}',
-      speed: '{speed}',
+      generation_config: {
+        speed: '{speed}',
+      },
     }, null, 2),
   },
   responseTextPath: undefined, // Cartesia 不支持 ASR

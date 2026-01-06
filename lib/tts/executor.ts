@@ -80,9 +80,15 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
   const providerCalls = filteredTtsProviders.map((provider) => {
     const providerVoice = enabledProviderVoices.find((pv) => pv.providerId === provider.id);
     const voice = providerVoice?.voice || options?.voice || 'default';
+
+    // 根据供应商类型选择正确的速度参数
+    const providerSpeed = provider.templateType === 'cartesia'
+      ? (options?.cartesiaSpeed ?? 1.0)
+      : (options?.speed ?? 1.0);
+
     const ttsOptions: TTSOptions = {
       voice,
-      speed: options?.speed,
+      speed: providerSpeed,
     };
     return {
       name: provider.name,

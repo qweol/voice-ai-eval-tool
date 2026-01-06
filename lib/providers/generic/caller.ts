@@ -494,12 +494,26 @@ export async function callGenericTTS(
         throw new Error(`请求体模板解析失败: ${error.message}`);
       }
 
-      // Cartesia 特殊处理：将 speed 从字符串转换为数字
-      if (config.templateType === 'cartesia' && requestBody.speed !== undefined) {
-        const speedValue = parseFloat(requestBody.speed);
-        if (!isNaN(speedValue)) {
-          requestBody.speed = speedValue;
-          console.log('✅ Cartesia: speed 参数已转换为数字 =', speedValue);
+      // Cartesia 特殊处理：将 generation_config.speed 从字符串转换为数字，并限制范围
+      if (config.templateType === 'cartesia') {
+        if (requestBody.generation_config && requestBody.generation_config.speed !== undefined) {
+          let speedValue = parseFloat(requestBody.generation_config.speed);
+          if (!isNaN(speedValue)) {
+            // Cartesia Sonic3 的 speed 范围是 0.6 到 1.5
+            speedValue = Math.max(0.6, Math.min(1.5, speedValue));
+            requestBody.generation_config.speed = speedValue;
+            console.log('✅ Cartesia: generation_config.speed 参数已转换为数字并限制范围 =', speedValue);
+          }
+        }
+        // 向后兼容：如果使用旧的 speed 字段，转换为 generation_config
+        else if (requestBody.speed !== undefined) {
+          let speedValue = parseFloat(requestBody.speed);
+          if (!isNaN(speedValue)) {
+            speedValue = Math.max(0.6, Math.min(1.5, speedValue));
+            requestBody.generation_config = { speed: speedValue };
+            delete requestBody.speed;
+            console.log('✅ Cartesia: 已将 speed 转换为 generation_config.speed =', speedValue);
+          }
         }
       }
 

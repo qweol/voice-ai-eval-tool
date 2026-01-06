@@ -24,6 +24,7 @@ export interface TTSResult {
 export interface TTSOptions {
   voice?: string; // 音色类型，具体值取决于供应商
   speed?: number; // 语速，0.5-2.0 之间
+  cartesiaSpeed?: number; // Cartesia专用语速，0.6-1.5 之间
   language?: string; // 语言代码，例如：'zh' | 'en' | 'ja' 等
 }
 

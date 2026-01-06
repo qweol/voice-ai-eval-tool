@@ -78,6 +78,7 @@ export default function TTSPage() {
   const [results, setResults] = useState<TTSResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [speed, setSpeed] = useState(1.0);
+  const [cartesiaSpeed, setCartesiaSpeed] = useState(1.0); // Cartesia专用速度控制 (0.6-1.5)
   const [batchCount, setBatchCount] = useState(3);
   const [ttsProgress, setTtsProgress] = useState<{
     status: string;
@@ -250,6 +251,16 @@ export default function TTSPage() {
       const providers = enabledProviders;
       const runBatchCount = opts?.batchCount ?? 1;
       const selectedProviderVoices = providerVoices.filter((pv) => pv.enabled);
+
+      // 为每个供应商设置正确的速度参数
+      const providersWithSpeed = providers.map(provider => {
+        const providerSpeed = provider.templateType === 'cartesia' ? cartesiaSpeed : speed;
+        return {
+          ...provider,
+          _speed: providerSpeed, // 临时存储速度值
+        };
+      });
+
       setLastRunConfig({
         speed,
         batchCount: runBatchCount,
@@ -265,11 +276,12 @@ export default function TTSPage() {
         body: JSON.stringify({
           text,
           options: {
-            speed,
+            speed, // 默认速度
+            cartesiaSpeed, // Cartesia专用速度
           },
           batchCount: runBatchCount,
           providerVoices: selectedProviderVoices,
-          providers,
+          providers: providersWithSpeed,
         }),
       });
 
@@ -1016,10 +1028,11 @@ export default function TTSPage() {
             {/* 参数调整 */}
             <div className="border-t-2 border-border pt-6 mt-6">
               <h3 className="text-xl font-heading font-bold mb-4">合成参数</h3>
-              <div className="max-w-md">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
+                {/* 通用语速控制 */}
                 <div>
                   <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-3">
-                    语速: <span className="text-accent">{speed.toFixed(1)}x</span>
+                    通用语速: <span className="text-accent">{speed.toFixed(1)}x</span>
                   </label>
                   <input
                     type="range"
@@ -1034,6 +1047,32 @@ export default function TTSPage() {
                     <span>0.5x</span>
                     <span>2.0x</span>
                   </div>
+                  <p className="text-xs text-mutedForeground mt-2">
+                    适用于除 Cartesia 外的所有供应商
+                  </p>
+                </div>
+
+                {/* Cartesia专用语速控制 */}
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-3">
+                    Cartesia 语速: <span className="text-accent">{cartesiaSpeed.toFixed(1)}x</span>
+                  </label>
+                  <input
+                    type="range"
+                    min="0.6"
+                    max="1.5"
+                    step="0.1"
+                    value={cartesiaSpeed}
+                    onChange={(e) => setCartesiaSpeed(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-accent"
+                  />
+                  <div className="flex justify-between text-xs text-mutedForeground mt-2 font-medium">
+                    <span>0.6x</span>
+                    <span>1.5x</span>
+                  </div>
+                  <p className="text-xs text-mutedForeground mt-2">
+                    Cartesia Sonic3 专用（官方限制范围）
+                  </p>
                 </div>
               </div>
             </div>
