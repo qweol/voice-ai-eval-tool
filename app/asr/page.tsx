@@ -349,56 +349,6 @@ export default function ASRPage() {
     console.log('批量识别完成');
   };
 
-  // 更新预期文本
-  const updateExpectedText = (audioFile: string, expectedText: string) => {
-    setBatchResults(prev =>
-      prev.map(result =>
-        result.audioFile === audioFile
-          ? { ...result, expectedText }
-          : result
-      )
-    );
-  };
-
-  // 标记为 BadCase
-  const markAsBadCase = async (result: BatchASRResult, providerResult: any) => {
-    try {
-      const badCase = {
-        type: 'asr',
-        providerId: providerResult.providerId,
-        providerName: providerResult.providerName,
-        modelId: providerResult.modelId,
-        input: {
-          audioFile: result.audioFile,
-          language: language,
-        },
-        output: {
-          text: providerResult.text,
-          confidence: providerResult.confidence,
-        },
-        expectedOutput: result.expectedText || '',
-        issue: '识别结果不准确',
-        severity: 'medium',
-        status: 'open',
-      };
-
-      const res = await fetch('/api/badcases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(badCase),
-      });
-
-      if (res.ok) {
-        alert('已成功标记为 BadCase');
-      } else {
-        throw new Error('保存失败');
-      }
-    } catch (error) {
-      console.error('标记 BadCase 失败:', error);
-      alert('标记 BadCase 失败，请重试');
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-50 relative overflow-hidden">
       <div className="container mx-auto px-4 py-12 relative z-10">
@@ -838,34 +788,8 @@ export default function ASRPage() {
                         ) : (
                           <p className="text-red-600">识别失败: {providerResult.error}</p>
                         )}
-
-                        {/* BadCase 标注按钮 */}
-                        {providerResult.status === 'success' && (
-                          <div className="mt-2">
-                            <button
-                              onClick={() => markAsBadCase(result, providerResult)}
-                              className="text-xs px-3 py-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
-                            >
-                              标记为 BadCase
-                            </button>
-                          </div>
-                        )}
                       </div>
                     ))}
-                  </div>
-
-                  {/* 预期文本输入 */}
-                  <div className="mt-4 pt-4 border-t-2 border-border">
-                    <label className="block text-sm font-bold text-foreground mb-2">
-                      预期文本（可选）
-                    </label>
-                    <input
-                      type="text"
-                      value={result.expectedText || ''}
-                      onChange={(e) => updateExpectedText(result.audioFile, e.target.value)}
-                      placeholder="输入预期的识别文本..."
-                      className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent transition-all"
-                    />
                   </div>
                 </CardContent>
               </Card>
