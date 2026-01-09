@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Upload, Play, Database } from 'lucide-react';
 import { getConfig, getAllEnabledProvidersWithSystem } from '@/lib/utils/config';
-import { GenericProviderConfig } from '@/lib/providers/generic/types';
+import { GenericProviderConfig, ModelDefinition } from '@/lib/providers/generic/types';
+import { templates } from '@/lib/providers/generic/templates';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import SampleLibraryModal from '@/components/asr/SampleLibraryModal';
@@ -17,6 +18,14 @@ interface ASRResult {
   status: string;
   error?: string;
   confidence?: number;
+  providerId?: string;
+  modelId?: string;
+}
+
+interface ProviderModel {
+  providerId: string;
+  modelId: string;
+  enabled: boolean;
 }
 
 export default function ASRPage() {
@@ -29,6 +38,7 @@ export default function ASRPage() {
   const [format, setFormat] = useState('wav');
   const [showSampleLibrary, setShowSampleLibrary] = useState(false);
   const [selectedSample, setSelectedSample] = useState<AsrSample | null>(null);
+  const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
 
   useEffect(() => {
     const config = getConfig();
@@ -45,6 +55,17 @@ export default function ASRPage() {
       });
 
       setEnabledProviders(asrProviders);
+
+      // 初始化 providerModels
+      const models = asrProviders.map((p) => {
+        const defaultModelId = p.selectedModels?.asr || '';
+        return {
+          providerId: p.id,
+          modelId: defaultModelId,
+          enabled: true,
+        };
+      });
+      setProviderModels(models);
     };
 
     loadProviders();
@@ -76,12 +97,42 @@ export default function ASRPage() {
     setFile(audioFile);
   };
 
+  const updateProviderModel = (providerId: string, modelId: string) => {
+    setProviderModels((prev) =>
+      prev.map((pm) => {
+        if (pm.providerId === providerId) {
+          return { ...pm, modelId };
+        }
+        return pm;
+      })
+    );
+
+    // 同时更新 enabledProviders 中的 selectedModels
+    setEnabledProviders((prev) =>
+      prev.map((p) => {
+        if (p.id === providerId) {
+          return {
+            ...p,
+            selectedModels: {
+              ...p.selectedModels,
+              asr: modelId,
+            },
+          };
+        }
+        return p;
+      })
+    );
+  };
+
   const toggleProvider = (providerId: string) => {
-    setEnabledProviders((prev) => {
-      const filtered = prev.filter((p) => p.id !== providerId);
-      // 如果过滤后数量没变，说明是要移除，否则是要添加（但这里我们只处理移除）
-      return filtered.length < prev.length ? filtered : prev;
-    });
+    setProviderModels((prev) =>
+      prev.map((pm) => {
+        if (pm.providerId === providerId) {
+          return { ...pm, enabled: !pm.enabled };
+        }
+        return pm;
+      })
+    );
   };
 
   const handleCompare = async () => {
@@ -91,17 +142,18 @@ export default function ASRPage() {
     setResults([]);
 
     try {
-      // 获取所有启用的供应商（包括系统预置）
-      const allProviders = await getAllEnabledProvidersWithSystem();
-      const providers = allProviders.filter(
-        (p) => p.serviceType === 'asr' || p.serviceType === 'both'
-      );
+      // 使用 enabledProviders 状态，它包含了 UI 中更新的模型选择
+      // 并根据 providerModels 的 enabled 状态过滤
+      const selectedProviders = enabledProviders.filter((p) => {
+        const pm = providerModels.find((m) => m.providerId === p.id);
+        return pm?.enabled ?? true;
+      });
 
       const formData = new FormData();
       formData.append('file', file);
       formData.append('language', language);
       formData.append('format', format);
-      formData.append('providers', JSON.stringify(providers));
+      formData.append('providers', JSON.stringify(selectedProviders));
 
       const res = await fetch('/api/asr', {
         method: 'POST',
@@ -220,20 +272,58 @@ export default function ASRPage() {
               <h3 className="text-xl font-heading font-bold mb-4">选择供应商</h3>
               <div className="space-y-3">
               {enabledProviders.map((provider) => {
+                const pm = providerModels.find((p) => p.providerId === provider.id);
+                const isEnabled = pm?.enabled ?? true;
+
+                // 获取可用的 ASR 模型
+                const getAvailableAsrModels = (): ModelDefinition[] => {
+                  if (!provider.templateType) return [];
+                  const template = templates[provider.templateType];
+                  if (!template.models) return [];
+                  return template.models.filter(m => m.type === 'asr');
+                };
+
+                const availableAsrModels = getAvailableAsrModels();
+                const currentModelId = pm?.modelId || provider.selectedModels?.asr;
+
                 return (
                     <Card key={provider.id} featured={false} hover={false} className="mb-2">
-                      <label className="flex items-center cursor-pointer">
+                    <div className="flex items-start gap-3">
+                      <label className="flex items-center cursor-pointer pt-1">
                     <input
                       type="checkbox"
-                      checked={true}
+                      checked={isEnabled}
                       onChange={() => toggleProvider(provider.id)}
-                          className="w-5 h-5 rounded border-2 border-foreground accent-accent cursor-pointer mr-3"
+                          className="w-5 h-5 rounded border-2 border-foreground accent-accent cursor-pointer"
                     />
-                        <span className="font-bold text-foreground">{provider.name}</span>
-                        <span className="ml-3 text-xs px-2 py-1 bg-accent text-accentForeground rounded-full font-bold">
-                      {provider.templateType || 'custom'}
-                    </span>
                   </label>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                        <span className="font-bold text-foreground">{provider.name}</span>
+                        <span className="text-xs px-2 py-1 bg-accent text-accentForeground rounded-full font-bold">
+                          {provider.templateType || 'custom'}
+                        </span>
+                        </div>
+                        {isEnabled && availableAsrModels.length > 0 && (
+                          <div className="mt-2">
+                            <label className="block text-xs font-bold uppercase tracking-wide text-mutedForeground mb-1">
+                              模型
+                            </label>
+                            <select
+                              value={currentModelId}
+                              onChange={(e) => updateProviderModel(provider.id, e.target.value)}
+                              className="w-full border-2 border-border rounded-lg px-3 py-1.5 bg-input text-foreground text-sm focus:outline-none focus:border-accent transition-all"
+                            >
+                              {availableAsrModels.map((model) => (
+                                <option key={model.id} value={model.id}>
+                                  {model.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     </Card>
                 );
               })}
