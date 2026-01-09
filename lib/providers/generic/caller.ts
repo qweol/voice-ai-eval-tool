@@ -228,10 +228,15 @@ export async function callGenericASR(
       }
     }
 
-    // Qwen风格：ASR使用专门的语音识别端点
+    // Qwen风格：根据模型选择不同的端点
     if (config.templateType === 'qwen') {
-      // Qwen ASR 使用 /services/audio/asr/recognition 端点
-      apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/asr/recognition';
+      // qwen3-asr-flash 使用多模态对话端点（与TTS相同）
+      if (modelId === 'qwen3-asr-flash') {
+        apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
+      } else {
+        // paraformer-v2 等旧模型使用专门的语音识别端点
+        apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/asr/recognition';
+      }
     }
 
     // 3. OpenAI风格使用multipart/form-data，其他使用JSON
@@ -306,37 +311,65 @@ export async function callGenericASR(
       // 其他API使用JSON格式
       let requestBody: any;
 
-      // 获取ASR专用的请求体模板
-      let bodyTemplate: string | undefined;
+      // 特殊处理：qwen3-asr-flash 需要使用 messages 格式（优先判断）
+      if (config.templateType === 'qwen' && modelId === 'qwen3-asr-flash') {
+        console.log('🔄 使用 qwen3-asr-flash 的 messages 格式');
+        // 根据官方文档，请求体结构应该是 { model, input: { messages } }
+        requestBody = {
+          model: modelId,
+          input: {
+            messages: [
+              {
+                role: 'system',
+                content: [{ text: '' }]
+              },
+              {
+                role: 'user',
+                content: [{ audio: `data:audio/${options?.format || 'wav'};base64,${audioBase64}` }]
+              }
+            ]
+          }
+        };
 
-      if (config.templateType && templates[config.templateType as keyof typeof templates]) {
-        // 从模板中获取ASR专用的请求体模板
-        const template = templates[config.templateType as keyof typeof templates];
-        bodyTemplate = template.requestBodyTemplate?.asr;
-        console.log('使用模板中的ASR请求体:', config.templateType);
-      }
-
-      // 如果没有找到ASR模板，尝试使用config.requestBody（但这可能是TTS模板）
-      if (!bodyTemplate && config.requestBody) {
-        bodyTemplate = config.requestBody;
-        console.warn('⚠️ 警告: 未找到ASR专用模板，使用config.requestBody（可能是TTS模板）');
-      }
-
-      if (bodyTemplate) {
-        const bodyString = replaceVariables(bodyTemplate, variables);
-        try {
-          requestBody = JSON.parse(bodyString);
-        } catch (error) {
-          throw new Error(`请求体模板解析失败: ${error}`);
+        // 如果有语言参数，添加到 parameters 中
+        if (options?.language) {
+          requestBody.parameters = {
+            language: options.language
+          };
         }
       } else {
-        // 如果没有模板，使用默认格式
-        console.warn('⚠️ 警告: 没有找到请求体模板，使用默认格式');
-        requestBody = {
-          audio: audioBase64,
-          language: variables.language,
-          format: variables.format,
-        };
+        // 其他模型：使用模板构建请求体
+        let bodyTemplate: string | undefined;
+
+        if (config.templateType && templates[config.templateType as keyof typeof templates]) {
+          // 从模板中获取ASR专用的请求体模板
+          const template = templates[config.templateType as keyof typeof templates];
+          bodyTemplate = template.requestBodyTemplate?.asr;
+          console.log('使用模板中的ASR请求体:', config.templateType);
+        }
+
+        // 如果没有找到ASR模板，尝试使用config.requestBody（但这可能是TTS模板）
+        if (!bodyTemplate && config.requestBody) {
+          bodyTemplate = config.requestBody;
+          console.warn('⚠️ 警告: 未找到ASR专用模板，使用config.requestBody（可能是TTS模板）');
+        }
+
+        if (bodyTemplate) {
+          const bodyString = replaceVariables(bodyTemplate, variables);
+          try {
+            requestBody = JSON.parse(bodyString);
+          } catch (error) {
+            throw new Error(`请求体模板解析失败: ${error}`);
+          }
+        } else {
+          // 如果没有模板，使用默认格式
+          console.warn('⚠️ 警告: 没有找到请求体模板，使用默认格式');
+          requestBody = {
+            audio: audioBase64,
+            language: variables.language,
+            format: variables.format,
+          };
+        }
       }
 
       // 构建请求头
@@ -368,9 +401,19 @@ export async function callGenericASR(
     }
 
     // 5. 提取文本
-    const text = config.responseTextPath
-      ? getValueByPath(responseData, config.responseTextPath)
-      : responseData.text || responseData.result?.text || '';
+    let text: string = '';
+
+    // 特殊处理：qwen3-asr-flash 使用 messages 响应格式
+    if (config.templateType === 'qwen' && modelId === 'qwen3-asr-flash') {
+      // qwen3-asr-flash 响应格式: output.choices[0].message.content[0].text
+      text = getValueByPath(responseData, 'output.choices[0].message.content[0].text') || '';
+      console.log('📝 从 qwen3-asr-flash messages 格式中提取文本');
+    } else {
+      // 其他模型使用配置的响应路径
+      text = config.responseTextPath
+        ? getValueByPath(responseData, config.responseTextPath)
+        : responseData.text || responseData.result?.text || '';
+    }
 
     if (!text) {
       throw new Error('无法从响应中提取文本，请检查responseTextPath配置');

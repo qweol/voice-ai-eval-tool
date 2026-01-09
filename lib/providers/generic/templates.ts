@@ -167,6 +167,14 @@ const qwenModels: ModelDefinition[] = [
     supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi'],
     maxFileSize: 25 * 1024 * 1024, // 25MB
   },
+  {
+    id: 'qwen3-asr-flash',
+    name: 'Qwen3-ASR Flash',
+    description: 'Qwen3 快速语音识别模型，支持多语言自动识别，低延迟',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it'],
+    maxFileSize: 25 * 1024 * 1024, // 25MB
+  },
   // TTS模型 - Qwen3-TTS-Flash（唯一可用的模型）
   {
     id: 'qwen3-tts-flash',
