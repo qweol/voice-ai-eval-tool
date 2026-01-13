@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button';
 import SampleLibraryModal from '@/components/asr/SampleLibraryModal';
 import { AsrSample } from '@/components/asr/SampleLibrary';
 import JSZip from 'jszip';
+import { calculateASRSimilarity, SimilarityInfo } from '@/lib/utils/similarity';
 
 interface ASRResult {
   provider: string;
@@ -46,6 +47,7 @@ interface BatchASRResult {
     error?: string;
   }[];
   expectedText?: string;
+  similarity?: SimilarityInfo;
 }
 
 export default function ASRPage() {
@@ -63,6 +65,7 @@ export default function ASRPage() {
   const [batchResults, setBatchResults] = useState<BatchASRResult[]>([]);
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
+  const [expandedSimilarity, setExpandedSimilarity] = useState<Set<number>>(new Set());
 
   // 共用状态
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
@@ -299,6 +302,19 @@ export default function ASRPage() {
     return results;
   };
 
+  // 切换相似度详情展开状态
+  const toggleSimilarityExpanded = (index: number) => {
+    setExpandedSimilarity(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(index)) {
+        newSet.delete(index);
+      } else {
+        newSet.add(index);
+      }
+      return newSet;
+    });
+  };
+
   // 批量识别函数
   const handleBatchRecognition = async () => {
     if (batchFiles.length === 0) {
@@ -333,11 +349,15 @@ export default function ASRPage() {
       // 为当前音频调用所有选中的供应商
       const audioResults = await recognizeAudioWithProviders(audioFile, selectedProviders);
 
+      // 计算相似度
+      const similarity = calculateASRSimilarity(audioResults);
+
       results.push({
         audioFile: audioFile.name,
         audioUrl: URL.createObjectURL(audioFile),
         audioSize: audioFile.size,
         results: audioResults,
+        similarity: similarity || undefined,
       });
 
       // 更新进度
@@ -752,45 +772,133 @@ export default function ASRPage() {
 
                   {/* 各供应商识别结果 */}
                   <div className="space-y-3">
-                    {result.results.map((providerResult, idx) => (
-                      <div
-                        key={idx}
-                        className={`p-4 rounded-lg border-2 ${
-                          providerResult.status === 'success'
-                            ? 'border-border bg-muted'
-                            : 'border-red-300 bg-red-50'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <span className="font-bold text-foreground">
-                              {providerResult.status === 'success' ? '✓' : '✗'}{' '}
-                              {providerResult.providerName}
-                            </span>
-                            {providerResult.modelName && (
-                              <span className="ml-2 text-xs px-2 py-1 bg-accent text-accentForeground rounded-full">
-                                {providerResult.modelName}
+                    {result.results.map((providerResult, idx) => {
+                      // 获取成功结果的索引（用于相似度数组）
+                      const successResults = result.results.filter(r => r.status === 'success');
+                      const successIndex = successResults.findIndex(r =>
+                        r.providerId === providerResult.providerId &&
+                        r.modelId === providerResult.modelId
+                      );
+                      const avgSimilarity = result.similarity?.averages[successIndex];
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`p-4 rounded-lg border-2 ${
+                            providerResult.status === 'success'
+                              ? 'border-border bg-muted'
+                              : 'border-red-300 bg-red-50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div>
+                              <span className="font-bold text-foreground">
+                                {providerResult.status === 'success' ? '✓' : '✗'}{' '}
+                                {providerResult.providerName}
                               </span>
-                            )}
-                          </div>
-                          {providerResult.status === 'success' && (
-                            <div className="text-xs text-mutedForeground">
-                              耗时: {providerResult.duration.toFixed(2)}s
-                              {providerResult.confidence && (
-                                <> | 置信度: {(providerResult.confidence * 100).toFixed(0)}%</>
+                              {providerResult.modelName && (
+                                <span className="ml-2 text-xs px-2 py-1 bg-accent text-accentForeground rounded-full">
+                                  {providerResult.modelName}
+                                </span>
                               )}
                             </div>
+                            {providerResult.status === 'success' && (
+                              <div className="text-xs text-mutedForeground">
+                                耗时: {providerResult.duration.toFixed(2)}s
+                                {providerResult.confidence && (
+                                  <> | 置信度: {(providerResult.confidence * 100).toFixed(0)}%</>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {providerResult.status === 'success' ? (
+                            <>
+                              <p className="text-foreground mb-2">{providerResult.text}</p>
+                              {avgSimilarity !== undefined && successResults.length > 1 && (
+                                <div className="text-xs text-mutedForeground">
+                                  与其他模型平均相似度: <span className="font-bold text-accent">{avgSimilarity.toFixed(1)}%</span>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <p className="text-red-600">识别失败: {providerResult.error}</p>
                           )}
                         </div>
-
-                        {providerResult.status === 'success' ? (
-                          <p className="text-foreground">{providerResult.text}</p>
-                        ) : (
-                          <p className="text-red-600">识别失败: {providerResult.error}</p>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
+
+                  {/* 整体一致性和详细对比 */}
+                  {result.similarity && result.results.filter(r => r.status === 'success').length > 1 && (
+                    <div className="mt-4 pt-4 border-t-2 border-border">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-foreground">整体一致性:</span>
+                          <span className="text-lg font-bold text-accent">{result.similarity.overall.toFixed(1)}%</span>
+                        </div>
+                        <button
+                          onClick={() => toggleSimilarityExpanded(index)}
+                          className="text-sm text-accent hover:text-accent/80 font-bold underline transition-colors"
+                        >
+                          {expandedSimilarity.has(index) ? '收起详细对比 ▲' : '查看详细对比 ▼'}
+                        </button>
+                      </div>
+
+                      {/* 详细对比矩阵 */}
+                      {expandedSimilarity.has(index) && (
+                        <div className="mt-3 overflow-x-auto">
+                          <table className="w-full text-sm border-collapse">
+                            <thead>
+                              <tr className="bg-muted">
+                                <th className="border border-border px-3 py-2 text-left font-bold text-foreground">模型</th>
+                                {result.results
+                                  .filter(r => r.status === 'success')
+                                  .map((r, i) => (
+                                    <th key={i} className="border border-border px-3 py-2 text-center font-bold text-foreground">
+                                      {r.providerName}
+                                    </th>
+                                  ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {result.results
+                                .filter(r => r.status === 'success')
+                                .map((r1, i) => (
+                                  <tr key={i} className="hover:bg-muted/50 transition-colors">
+                                    <td className="border border-border px-3 py-2 font-bold text-foreground">
+                                      {r1.providerName}
+                                    </td>
+                                    {result.results
+                                      .filter(r => r.status === 'success')
+                                      .map((_, j) => {
+                                        const similarity = result.similarity?.matrix[i][j];
+                                        const isIdentical = i === j;
+                                        return (
+                                          <td
+                                            key={j}
+                                            className={`border border-border px-3 py-2 text-center ${
+                                              isIdentical
+                                                ? 'bg-muted text-mutedForeground'
+                                                : similarity && similarity >= 90
+                                                ? 'bg-green-100 text-green-800 font-bold'
+                                                : similarity && similarity >= 70
+                                                ? 'bg-yellow-100 text-yellow-800 font-bold'
+                                                : 'bg-red-100 text-red-800 font-bold'
+                                            }`}
+                                          >
+                                            {isIdentical ? '-' : `${similarity?.toFixed(1)}%`}
+                                          </td>
+                                        );
+                                      })}
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
