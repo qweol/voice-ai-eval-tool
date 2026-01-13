@@ -12,6 +12,7 @@ import SampleLibraryModal from '@/components/asr/SampleLibraryModal';
 import { AsrSample } from '@/components/asr/SampleLibrary';
 import JSZip from 'jszip';
 import { calculateASRSimilarity, SimilarityInfo } from '@/lib/utils/similarity';
+import { detectAudioFormat } from '@/lib/utils/audioFormat';
 
 interface ASRResult {
   provider: string;
@@ -257,9 +258,12 @@ export default function ASRPage() {
 
     for (const provider of providers) {
       try {
+        // 自动识别音频格式
+        const audioFormat = detectAudioFormat(audioFile.name);
+
         const formData = new FormData();
         formData.append('file', audioFile);
-        formData.append('format', format);
+        formData.append('format', audioFormat);
         formData.append('providers', JSON.stringify([provider]));
 
         const res = await fetch('/api/asr', {
@@ -506,27 +510,6 @@ export default function ASRPage() {
               )}
             </>
           )}
-
-          {/* 识别参数 */}
-            <div className="border-t-2 border-border pt-6 mb-6">
-              <h3 className="text-xl font-heading font-bold mb-4">识别参数</h3>
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                  <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
-                  音频格式
-                </label>
-                <select
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value)}
-                    className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
-                >
-                  <option value="wav">WAV</option>
-                  <option value="mp3">MP3</option>
-                  <option value="m4a">M4A</option>
-                </select>
-              </div>
-            </div>
-          </div>
 
           {/* 供应商选择 */}
             <div className="border-t-2 border-border pt-6 mb-6">
