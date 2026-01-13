@@ -4,10 +4,14 @@
  */
 
 /**
- * 预处理文本：去除空格并转小写
+ * 预处理文本：去除空格、标点符号、特殊字符，并转小写
+ * 只保留字母、数字、汉字等实际内容
  */
 function preprocessText(text: string): string {
-  return text.replace(/\s+/g, '').toLowerCase();
+  return text
+    .toLowerCase() // 转小写
+    .replace(/\s+/g, '') // 去除所有空格
+    .replace(/[^\p{L}\p{N}]/gu, ''); // 去除所有非字母、非数字的字符（保留各国语言文字）
 }
 
 /**

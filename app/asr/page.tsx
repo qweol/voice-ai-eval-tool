@@ -59,6 +59,8 @@ export default function ASRPage() {
   const [results, setResults] = useState<ASRResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string>('');
+  const [singleFileSimilarity, setSingleFileSimilarity] = useState<SimilarityInfo | null>(null);
+  const [showSingleFileSimilarity, setShowSingleFileSimilarity] = useState(false);
 
   // 批量模式状态
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
@@ -234,6 +236,10 @@ export default function ASRPage() {
 
       const data = await res.json();
       setResults(data.results);
+
+      // 计算相似度
+      const similarity = calculateASRSimilarity(data.results);
+      setSingleFileSimilarity(similarity);
     } catch (error) {
       console.error('Error:', error);
       alert('识别过程出错，请检查配置或稍后重试');
@@ -670,6 +676,11 @@ export default function ASRPage() {
                     <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
                       置信度
                     </th>
+                    {singleFileSimilarity && results.filter(r => r.status === 'success').length > 1 && (
+                      <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
+                        平均相似度
+                      </th>
+                    )}
                     <th className="border-2 border-border px-4 py-3 text-left font-heading font-bold text-foreground">
                       状态
                     </th>
@@ -698,6 +709,20 @@ export default function ASRPage() {
                           <span className="text-mutedForeground">-</span>
                         )}
                       </td>
+                      {singleFileSimilarity && results.filter(r => r.status === 'success').length > 1 && (() => {
+                        const successResults = results.filter(r => r.status === 'success');
+                        const successIndex = successResults.findIndex(r => r.provider === result.provider);
+                        const avgSimilarity = singleFileSimilarity.averages[successIndex];
+                        return (
+                          <td className="border-2 border-border px-4 py-3 text-mutedForeground font-medium">
+                            {result.status === 'success' && avgSimilarity !== undefined ? (
+                              <span className="text-accent font-bold">{avgSimilarity.toFixed(1)}%</span>
+                            ) : (
+                              <span className="text-mutedForeground">-</span>
+                            )}
+                          </td>
+                        );
+                      })()}
                       <td className="border-2 border-border px-4 py-3">
                         {result.status === 'success' ? (
                           <span className="px-3 py-1 bg-quaternary text-white rounded-full font-bold text-sm">✓ 成功</span>
@@ -725,6 +750,79 @@ export default function ASRPage() {
                   ))}
               </div>
             </div>
+
+            {/* 相似度分析 */}
+            {singleFileSimilarity && results.filter(r => r.status === 'success').length > 1 && (
+              <div className="mt-6 pt-6 border-t-2 border-border">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-xl font-heading font-bold text-foreground">相似度分析</h3>
+                    <span className="text-sm text-mutedForeground">
+                      整体一致性: <span className="text-lg font-bold text-accent">{singleFileSimilarity.overall.toFixed(1)}%</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setShowSingleFileSimilarity(!showSingleFileSimilarity)}
+                    className="text-sm text-accent hover:text-accent/80 font-bold underline transition-colors"
+                  >
+                    {showSingleFileSimilarity ? '收起详细对比 ▲' : '查看详细对比 ▼'}
+                  </button>
+                </div>
+
+                {/* 详细对比矩阵 */}
+                {showSingleFileSimilarity && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="bg-muted">
+                          <th className="border border-border px-3 py-2 text-left font-bold text-foreground">模型</th>
+                          {results
+                            .filter(r => r.status === 'success')
+                            .map((r, i) => (
+                              <th key={i} className="border border-border px-3 py-2 text-center font-bold text-foreground">
+                                {r.provider}
+                              </th>
+                            ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {results
+                          .filter(r => r.status === 'success')
+                          .map((r1, i) => (
+                            <tr key={i} className="hover:bg-muted/50 transition-colors">
+                              <td className="border border-border px-3 py-2 font-bold text-foreground">
+                                {r1.provider}
+                              </td>
+                              {results
+                                .filter(r => r.status === 'success')
+                                .map((_, j) => {
+                                  const similarity = singleFileSimilarity.matrix[i][j];
+                                  const isIdentical = i === j;
+                                  return (
+                                    <td
+                                      key={j}
+                                      className={`border border-border px-3 py-2 text-center ${
+                                        isIdentical
+                                          ? 'bg-muted text-mutedForeground'
+                                          : similarity >= 90
+                                          ? 'bg-green-100 text-green-800 font-bold'
+                                          : similarity >= 70
+                                          ? 'bg-yellow-100 text-yellow-800 font-bold'
+                                          : 'bg-red-100 text-red-800 font-bold'
+                                      }`}
+                                    >
+                                      {isIdentical ? '-' : `${similarity.toFixed(1)}%`}
+                                    </td>
+                                  );
+                                })}
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </Card>
         )}
 
