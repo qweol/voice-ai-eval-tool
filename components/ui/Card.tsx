@@ -23,11 +23,12 @@ interface CardHeaderProps {
   children: React.ReactNode;
   icon?: React.ReactNode;
   badge?: React.ReactNode;
+  className?: string;
 }
 
-export function CardHeader({ children, icon, badge }: CardHeaderProps) {
+export function CardHeader({ children, icon, badge, className = '' }: CardHeaderProps) {
   return (
-    <div className="mb-4 relative">
+    <div className={`mb-4 relative ${className}`}>
       {icon && (
         <div className="absolute -top-4 -right-4 w-12 h-12 rounded-full bg-accent flex items-center justify-center text-white border-2 border-foreground shadow-pop">
           {icon}

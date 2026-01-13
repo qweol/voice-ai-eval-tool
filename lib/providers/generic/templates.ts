@@ -350,25 +350,54 @@ const cartesiaModels: ModelDefinition[] = [
     speedRange: [0.5, 2.0],
   },
 ];
+/**
+ * 豆包模型定义
+ */
+const doubaoModels: ModelDefinition[] = [
+  // ASR模型
+  {
+    id: 'bigmodel',
+    name: '豆包录音文件识别2.0',
+    description: '基于大模型的录音文件识别服务,支持多语言自动识别,高准确率',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'yue', 'wuu', 'nan', 'hsn', 'sxn'],
+    maxFileSize: 100 * 1024 * 1024, // 100MB
+  },
+];
 
 /**
  * 豆包风格模板
- * 适用于：字节跳动豆包语音服务
+ * 适用于：字节跳动豆包语音服务 - 录音文件识别2.0
+ *
+ * API文档: https://www.volcengine.com/docs/6561/1631584
+ *
+ * 注意:
+ * - 使用自定义Header认证 (X-Api-App-Key, X-Api-Access-Key)
+ * - 音频通过Base64编码直接上传
+ * - 支持多种音频格式: wav, mp3, ogg, pcm等
+ * - 支持多语言自动识别
  */
 export const doubaoTemplate: APITemplate = {
   id: 'doubao',
   name: '豆包风格',
-  description: '适用于字节跳动火山引擎豆包语音识别/合成服务',
-  defaultApiUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+  description: '适用于字节跳动火山引擎豆包语音识别服务(录音文件识别2.0)',
+  defaultApiUrl: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash',
   defaultMethod: 'POST',
-  authType: 'bearer',
+  authType: 'custom', // 使用自定义认证方式
   isBuiltin: true,
   requestBodyTemplate: {
     asr: JSON.stringify({
-      model: '{model}',
-      audio: '{audio}',
-      language: '{language}',
-      format: '{format}',
+      user: {
+        uid: '{uid}',
+      },
+      audio: {
+        data: '{audioBase64}',
+      },
+      request: {
+        model_name: '{model}',
+        enable_itn: true,
+        enable_punc: true,
+      },
     }, null, 2),
     tts: JSON.stringify({
       model: '{model}',
@@ -378,14 +407,26 @@ export const doubaoTemplate: APITemplate = {
       volume: '{volume}',
     }, null, 2),
   },
-  responseTextPath: 'result.text',
+  responseTextPath: 'text',
   responseAudioPath: 'result.audio',
   responseAudioFormat: 'base64',
-  errorPath: 'error.message',
+  errorPath: 'message',
   variables: [
-    { description: '模型名称', required: true, default: 'doubao-asr' },
-    { description: '语言代码', required: false, default: 'zh' },
+    { description: '模型名称(bigmodel)', required: true, default: 'bigmodel' },
+    { description: '用户ID', required: false, default: 'user_001' },
   ],
+
+  // 模型列表
+  models: doubaoModels,
+
+  // 允许自定义模型
+  allowCustomModel: false,
+
+  // 默认模型
+  defaultModel: {
+    asr: 'bigmodel',
+    tts: undefined, // 暂不支持TTS
+  },
 };
 
 /**

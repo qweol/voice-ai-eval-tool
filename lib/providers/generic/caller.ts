@@ -190,6 +190,22 @@ function buildAuthHeaders(config: GenericProviderConfig): Record<string, string>
     headers['Cartesia-Version'] = '2024-06-30';
   }
 
+  // Doubao/豆包 特殊处理：使用自定义Header认证
+  if (config.templateType === 'doubao') {
+    // 豆包需要特殊的Header格式
+    if (config.apiKey) {
+      headers['X-Api-Access-Key'] = config.apiKey;
+    }
+    if (config.appId) {
+      headers['X-Api-App-Key'] = config.appId;
+    }
+    // 从 requestHeaders 中获取 Resource ID，如果没有则使用默认值
+    const resourceId = config.requestHeaders?.['X-Api-Resource-Id'] || 'volc.bigasr.auc_turbo';
+    headers['X-Api-Resource-Id'] = resourceId;
+    headers['X-Api-Request-Id'] = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    headers['X-Api-Sequence'] = '-1'; // -1表示单次请求
+  }
+
   return headers;
 }
 
@@ -211,10 +227,11 @@ export async function callGenericASR(
     const variables: RequestVariables = {
       audio: audioBase64,
       audioBase64: audioBase64,
-      audio_url: audioBase64, // Qwen API使用audio_url字段，但实际传入base64数据
+      audio_url: audioBase64, // 保留用于其他可能需要的API
       language: options?.language || 'zh',
       format: options?.format || 'wav',
       model: modelId,
+      uid: 'user_001', // 豆包需要的用户ID
     };
 
     // 2. 构建完整的API URL
@@ -393,10 +410,24 @@ export async function callGenericASR(
     }
 
     // 4. 解析响应
-    const responseData = await response.json();
-
     console.log('响应状态:', response.status, response.statusText);
-    console.log('响应数据（前500字符）:', JSON.stringify(responseData).substring(0, 500));
+    console.log('响应Content-Type:', response.headers.get('content-type'));
+
+    // 先获取原始响应文本用于调试
+    const responseText = await response.text();
+    console.log('原始响应（前500字符）:', responseText.substring(0, 500));
+
+    // 尝试解析JSON
+    let responseData: any;
+    try {
+      responseData = JSON.parse(responseText);
+    } catch (parseError: any) {
+      console.error('JSON解析失败:', parseError.message);
+      console.error('完整响应文本:', responseText);
+      throw new Error(`API返回了非JSON格式的响应: ${responseText.substring(0, 200)}`);
+    }
+
+    console.log('解析后的响应数据:', JSON.stringify(responseData).substring(0, 500));
 
     if (!response.ok) {
       const errorMessage = config.errorPath
@@ -413,6 +444,10 @@ export async function callGenericASR(
       // qwen3-asr-flash 响应格式: output.choices[0].message.content[0].text
       text = getValueByPath(responseData, 'output.choices[0].message.content[0].text') || '';
       console.log('📝 从 qwen3-asr-flash messages 格式中提取文本');
+    } else if (config.templateType === 'doubao') {
+      // 豆包响应格式: text 字段直接包含识别结果
+      text = responseData.text || '';
+      console.log('📝 从豆包响应中提取文本');
     } else {
       // 其他模型使用配置的响应路径
       text = config.responseTextPath
@@ -930,7 +965,7 @@ export async function callMinimaxTTS(
     ws.on('open', () => {
       try {
         // 生成用户 ID
-        const uid = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const uid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
         const request = {
           app: {

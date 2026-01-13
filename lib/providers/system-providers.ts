@@ -109,11 +109,51 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
+  // Doubao/豆包 预置配置
+  // 需要两个参数：DOUBAO_APP_ID 和 DOUBAO_ACCESS_TOKEN
+  if (process.env.DOUBAO_APP_ID && process.env.DOUBAO_ACCESS_TOKEN) {
+    const doubaoTemplate = templates.doubao;
+
+    // 允许通过环境变量自定义API端点和Resource ID
+    const apiUrl = process.env.DOUBAO_API_URL || doubaoTemplate.defaultApiUrl;
+    const resourceId = process.env.DOUBAO_RESOURCE_ID || 'volc.bigasr.auc_turbo';
+
+    providers.push({
+      id: 'system-doubao',
+      name: '豆包（系统预置）',
+      type: 'generic',
+      serviceType: 'asr', // 豆包目前仅支持 ASR
+      apiUrl: apiUrl,
+      method: doubaoTemplate.defaultMethod,
+      authType: doubaoTemplate.authType,
+      apiKey: process.env.DOUBAO_ACCESS_TOKEN, // Access Token
+      appId: process.env.DOUBAO_APP_ID, // App ID
+      requestBody: doubaoTemplate.requestBodyTemplate.asr, // 使用 ASR 模板
+      responseTextPath: doubaoTemplate.responseTextPath,
+      responseAudioPath: doubaoTemplate.responseAudioPath,
+      responseAudioFormat: doubaoTemplate.responseAudioFormat,
+      errorPath: doubaoTemplate.errorPath,
+      templateType: 'doubao',
+      selectedModels: {
+        asr: doubaoTemplate.defaultModel?.asr,
+        tts: undefined, // 豆包暂不支持 TTS
+      },
+      // 存储自定义的 Resource ID，供 caller.ts 使用
+      requestHeaders: {
+        'X-Api-Resource-Id': resourceId,
+      },
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
   // Minimax 预置配置
   // 支持两种方式：
   // 1. HTTP REST API（通过代理/中转站）：使用 MINIMAX_TTS_API_URL
   // 2. WebSocket（官方）：使用 MINIMAX_APP_ID + MINIMAX_TOKEN
-  
+
   // 方式1：HTTP REST API（代理方式）
   if (process.env.MINIMAX_TTS_API_URL && process.env.MINIMAX_API_KEY) {
     const minimaxTemplate = templates.minimax;
