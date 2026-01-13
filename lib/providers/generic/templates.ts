@@ -160,14 +160,6 @@ const qwen3FlashVoices: VoiceDefinition[] = [
 const qwenModels: ModelDefinition[] = [
   // ASR模型
   {
-    id: 'paraformer-v2',
-    name: 'Paraformer V2',
-    description: '阿里云通义千问语音识别模型，支持多语言，高准确率',
-    type: 'asr',
-    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi'],
-    maxFileSize: 25 * 1024 * 1024, // 25MB
-  },
-  {
     id: 'qwen3-asr-flash',
     name: 'Qwen3-ASR Flash',
     description: 'Qwen3 快速语音识别模型，支持多语言自动识别，低延迟',
@@ -191,7 +183,7 @@ const qwenModels: ModelDefinition[] = [
  * 适用于：通义千问ASR/TTS，包括最新的Qwen3-TTS
  *
  * 注意：
- * - ASR使用 paraformer-v2 模型，通过 /services/audio/asr/recognition 端点
+ * - ASR使用 qwen3-asr-flash 模型，通过 /services/aigc/multimodal-generation/generation 端点
  * - TTS使用 qwen3-tts-flash 模型，通过 /services/aigc/multimodal-generation/generation 端点
  */
 export const qwenTemplate: APITemplate = {
@@ -224,7 +216,7 @@ export const qwenTemplate: APITemplate = {
   responseAudioFormat: 'base64', // 如果data为空，会自动从url下载
   errorPath: 'message',
   variables: [
-    { description: '模型名称（如：paraformer-v2, qwen3-tts-flash）', required: true, default: 'qwen3-tts-flash' },
+    { description: '模型名称（如：qwen3-asr-flash, qwen3-tts-flash）', required: true, default: 'qwen3-tts-flash' },
     { description: '语言代码', required: false, default: 'zh' },
   ],
 
@@ -236,7 +228,7 @@ export const qwenTemplate: APITemplate = {
 
   // 新增：默认模型
   defaultModel: {
-    asr: 'paraformer-v2',
+    asr: 'qwen3-asr-flash',
     tts: 'qwen3-tts-flash',
   },
 };

@@ -69,7 +69,6 @@ export default function ASRPage() {
 
   // 共用状态
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
-  const [language, setLanguage] = useState('zh');
   const [format, setFormat] = useState('wav');
   const [showSampleLibrary, setShowSampleLibrary] = useState(false);
   const [selectedSample, setSelectedSample] = useState<AsrSample | null>(null);
@@ -77,7 +76,6 @@ export default function ASRPage() {
 
   useEffect(() => {
     const config = getConfig();
-    setLanguage(config.asr.defaultLanguage);
     setFormat(config.asr.defaultFormat);
 
     // 获取所有启用的提供者（包括系统预置）
@@ -121,7 +119,6 @@ export default function ASRPage() {
     setSelectedSample(sample);
     setFile(null);
     setAudioUrl(`/api/storage/audio/${sample.filename}`);
-    setLanguage(sample.language);
 
     // 获取样本文件
     const audioRes = await fetch(`/api/storage/audio/${sample.filename}`);
@@ -223,7 +220,6 @@ export default function ASRPage() {
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('language', language);
       formData.append('format', format);
       formData.append('providers', JSON.stringify(selectedProviders));
 
@@ -257,7 +253,6 @@ export default function ASRPage() {
       try {
         const formData = new FormData();
         formData.append('file', audioFile);
-        formData.append('language', language);
         formData.append('format', format);
         formData.append('providers', JSON.stringify([provider]));
 
@@ -510,20 +505,6 @@ export default function ASRPage() {
             <div className="border-t-2 border-border pt-6 mb-6">
               <h3 className="text-xl font-heading font-bold mb-4">识别参数</h3>
             <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                  <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
-                  语言
-                </label>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                    className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
-                >
-                  <option value="zh">中文</option>
-                  <option value="en">英文</option>
-                  <option value="zh-en">中英文混合</option>
-                </select>
-              </div>
               <div>
                   <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-2">
                   音频格式

@@ -13,32 +13,41 @@ import WebSocket from 'ws';
  * 获取要使用的模型ID
  */
 function getModelId(config: GenericProviderConfig, serviceType: 'asr' | 'tts'): string {
+  let modelId: string | undefined;
+
   // 1. 优先使用自定义模型
   if (config.customModels?.[serviceType]) {
-    return config.customModels[serviceType];
+    modelId = config.customModels[serviceType];
   }
-
   // 2. 使用用户选择的模型
-  if (config.selectedModels?.[serviceType]) {
-    return config.selectedModels[serviceType];
+  else if (config.selectedModels?.[serviceType]) {
+    modelId = config.selectedModels[serviceType];
   }
-
   // 3. 使用模板默认模型
-  if (config.templateType) {
+  else if (config.templateType) {
     // 先尝试从内置模板获取（同步，向后兼容）
     const builtinTemplate = templates[config.templateType as keyof typeof templates];
     if (builtinTemplate?.defaultModel?.[serviceType]) {
-      return builtinTemplate.defaultModel[serviceType];
+      modelId = builtinTemplate.defaultModel[serviceType];
     }
-    // 如果是自定义模板，需要异步加载（这里先返回默认值，实际应该在调用前加载）
   }
 
-  // 4. 回退到硬编码默认值
-  if (serviceType === 'asr') {
-    return config.templateType === 'openai' ? 'whisper-1' : 'default';
-  } else {
-    return config.templateType === 'openai' ? 'gpt-4o-mini-tts' : 'default';
+  // 4. 迁移逻辑：如果检测到已删除的 paraformer-v2，自动替换为 qwen3-asr-flash
+  if (serviceType === 'asr' && modelId === 'paraformer-v2' && config.templateType === 'qwen') {
+    console.warn('⚠️ 检测到已删除的模型 paraformer-v2，自动迁移为 qwen3-asr-flash');
+    modelId = 'qwen3-asr-flash';
   }
+
+  // 5. 如果还没有模型ID，回退到硬编码默认值
+  if (!modelId) {
+    if (serviceType === 'asr') {
+      modelId = config.templateType === 'openai' ? 'whisper-1' : 'default';
+    } else {
+      modelId = config.templateType === 'openai' ? 'gpt-4o-mini-tts' : 'default';
+    }
+  }
+
+  return modelId;
 }
 
 /**
@@ -228,15 +237,9 @@ export async function callGenericASR(
       }
     }
 
-    // Qwen风格：根据模型选择不同的端点
+    // Qwen风格：使用多模态对话端点（与TTS相同）
     if (config.templateType === 'qwen') {
-      // qwen3-asr-flash 使用多模态对话端点（与TTS相同）
-      if (modelId === 'qwen3-asr-flash') {
-        apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
-      } else {
-        // paraformer-v2 等旧模型使用专门的语音识别端点
-        apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/audio/asr/recognition';
-      }
+      apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
     }
 
     // 3. OpenAI风格使用multipart/form-data，其他使用JSON
@@ -255,9 +258,7 @@ export async function callGenericASR(
       formData.append('file', audioBlob, `audio.${options?.format || 'wav'}`);
       formData.append('model', modelId);
 
-      if (options?.language) {
-        formData.append('language', options.language);
-      }
+      // 所有 ASR 模型都使用自动语言检测，不传递 language 参数
 
       formData.append('response_format', 'json');
 
@@ -298,9 +299,9 @@ export async function callGenericASR(
       console.log('=== OpenAI ASR API 调用信息 ===');
       console.log('API URL:', apiUrl);
       console.log('模型:', modelId);
-      console.log('语言:', options?.language);
       console.log('格式:', options?.format);
       console.log('音频大小:', audioBuffer.length, 'bytes');
+      console.log('语言检测: 自动检测（未指定语言参数）');
 
       response = await fetch(apiUrl, {
         method: config.method,
@@ -331,12 +332,7 @@ export async function callGenericASR(
           }
         };
 
-        // 如果有语言参数，添加到 parameters 中
-        if (options?.language) {
-          requestBody.parameters = {
-            language: options.language
-          };
-        }
+        // 所有 ASR 模型都使用自动语言检测，不传递 language 参数
       } else {
         // 其他模型：使用模板构建请求体
         let bodyTemplate: string | undefined;
@@ -366,9 +362,18 @@ export async function callGenericASR(
           console.warn('⚠️ 警告: 没有找到请求体模板，使用默认格式');
           requestBody = {
             audio: audioBase64,
-            language: variables.language,
+            // 所有 ASR 模型都使用自动语言检测，不传递 language 参数
             format: variables.format,
           };
+        }
+      }
+
+      // 所有 ASR 模型都使用自动语言检测，移除请求体中的 language 字段
+      if (requestBody && typeof requestBody === 'object') {
+        delete requestBody.language;
+        // 如果存在 parameters.language，也删除
+        if (requestBody.parameters && typeof requestBody.parameters === 'object') {
+          delete requestBody.parameters.language;
         }
       }
 

@@ -99,14 +99,14 @@ export const PRICING_RULES: PricingRule[] = [
     source: 'https://cartesia.ai/pricing',
   },
   {
-    id: 'qwen-paraformer-v2',
+    id: 'qwen-asr-flash',
     serviceType: 'asr',
     templateType: 'qwen',
-    modelId: 'paraformer-v2',
+    modelId: 'qwen3-asr-flash',
     unit: 'per_second',
-    amount: 0.00008,
+    amount: 0.00008, // TODO: 确认 qwen3-asr-flash 的实际定价
     currency: 'CNY',
-    source: '阿里云百炼定价（console doc）',
+    source: '阿里云百炼定价（需要确认）',
   },
 ];
 
