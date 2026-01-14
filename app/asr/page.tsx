@@ -13,6 +13,8 @@ import { AsrSample } from '@/components/asr/SampleLibrary';
 import JSZip from 'jszip';
 import { calculateASRSimilarity, SimilarityInfo } from '@/lib/utils/similarity';
 import { detectAudioFormat } from '@/lib/utils/audioFormat';
+import { highlightCommonParts } from '@/lib/utils/textHighlight';
+import { HighlightedText } from '@/components/asr/HighlightedText';
 
 interface ASRResult {
   provider: string;
@@ -723,14 +725,24 @@ export default function ASRPage() {
             <div className="mt-6">
               <h3 className="text-xl font-heading font-bold mb-4">文本对比</h3>
               <div className="space-y-3">
-                {results
-                  .filter(r => r.status === 'success')
-                  .map((result, i) => (
+                {(() => {
+                  const successResults = results.filter(r => r.status === 'success');
+                  const successTexts = successResults.map(r => r.text);
+                  const highlightedSegments = successTexts.length > 1
+                    ? highlightCommonParts(successTexts)
+                    : [];
+
+                  return successResults.map((result, i) => (
                     <Card key={i} featured={false} hover={false} className="mb-2">
                       <span className="font-bold text-accent">{result.provider}:</span>{' '}
-                      <span className="text-foreground">{result.text}</span>
+                      {highlightedSegments.length > 0 ? (
+                        <HighlightedText segments={highlightedSegments[i]} />
+                      ) : (
+                        <span className="text-foreground">{result.text}</span>
+                      )}
                     </Card>
-                  ))}
+                  ));
+                })()}
               </div>
             </div>
 
@@ -850,70 +862,86 @@ export default function ASRPage() {
 
                   {/* 各供应商识别结果 - 表格布局 */}
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm border-collapse">
-                      <thead>
-                        <tr className="bg-muted">
-                          <th className="border border-border px-3 py-2 text-left font-bold w-32">供应商</th>
-                          <th className="border border-border px-3 py-2 text-left font-bold">识别文本</th>
-                          <th className="border border-border px-3 py-2 text-center font-bold w-20">耗时</th>
-                          <th className="border border-border px-3 py-2 text-center font-bold w-20">置信度</th>
-                          {result.similarity && result.results.filter(r => r.status === 'success').length > 1 && (
-                            <th className="border border-border px-3 py-2 text-center font-bold w-24">相似度</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {result.results.map((providerResult, idx) => {
-                          const successResults = result.results.filter(r => r.status === 'success');
-                          const successIndex = successResults.findIndex(r =>
-                            r.providerId === providerResult.providerId &&
-                            r.modelId === providerResult.modelId
-                          );
-                          const avgSimilarity = result.similarity?.averages[successIndex];
+                    {(() => {
+                      // 计算高亮片段
+                      const successTexts = result.results
+                        .filter(r => r.status === 'success')
+                        .map(r => r.text);
+                      const highlightedSegments = successTexts.length > 1
+                        ? highlightCommonParts(successTexts)
+                        : [];
 
-                          return (
-                            <tr
-                              key={idx}
-                              className={`hover:bg-muted/50 transition-colors ${
-                                providerResult.status === 'error' ? 'bg-red-50' : ''
-                              }`}
-                            >
-                              <td className="border border-border px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-foreground">
-                                    {providerResult.status === 'success' ? '✓' : '✗'} {providerResult.providerName}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="border border-border px-3 py-2">
-                                {providerResult.status === 'success' ? (
-                                  <span className="text-foreground">{providerResult.text}</span>
-                                ) : (
-                                  <span className="text-red-600">识别失败: {providerResult.error}</span>
-                                )}
-                              </td>
-                              <td className="border border-border px-3 py-2 text-center text-xs text-mutedForeground">
-                                {providerResult.status === 'success' ? `${providerResult.duration.toFixed(1)}s` : '-'}
-                              </td>
-                              <td className="border border-border px-3 py-2 text-center text-xs text-mutedForeground">
-                                {providerResult.status === 'success' && providerResult.confidence
-                                  ? `${(providerResult.confidence * 100).toFixed(0)}%`
-                                  : '-'}
-                              </td>
-                              {result.similarity && successResults.length > 1 && (
-                                <td className="border border-border px-3 py-2 text-center">
-                                  {providerResult.status === 'success' && avgSimilarity !== undefined ? (
-                                    <span className="font-bold text-accent">{avgSimilarity.toFixed(1)}%</span>
-                                  ) : (
-                                    <span className="text-mutedForeground">-</span>
-                                  )}
-                                </td>
+                      return (
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="bg-muted">
+                              <th className="border border-border px-3 py-2 text-left font-bold w-32">供应商</th>
+                              <th className="border border-border px-3 py-2 text-left font-bold">识别文本</th>
+                              <th className="border border-border px-3 py-2 text-center font-bold w-20">耗时</th>
+                              <th className="border border-border px-3 py-2 text-center font-bold w-20">置信度</th>
+                              {result.similarity && result.results.filter(r => r.status === 'success').length > 1 && (
+                                <th className="border border-border px-3 py-2 text-center font-bold w-24">相似度</th>
                               )}
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                          </thead>
+                          <tbody>
+                            {result.results.map((providerResult, idx) => {
+                              const successResults = result.results.filter(r => r.status === 'success');
+                              const successIndex = successResults.findIndex(r =>
+                                r.providerId === providerResult.providerId &&
+                                r.modelId === providerResult.modelId
+                              );
+                              const avgSimilarity = result.similarity?.averages[successIndex];
+
+                              return (
+                                <tr
+                                  key={idx}
+                                  className={`hover:bg-muted/50 transition-colors ${
+                                    providerResult.status === 'error' ? 'bg-red-50' : ''
+                                  }`}
+                                >
+                                  <td className="border border-border px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-foreground">
+                                        {providerResult.status === 'success' ? '✓' : '✗'} {providerResult.providerName}
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td className="border border-border px-3 py-2">
+                                    {providerResult.status === 'success' ? (
+                                      highlightedSegments.length > 0 && successIndex >= 0 ? (
+                                        <HighlightedText segments={highlightedSegments[successIndex]} />
+                                      ) : (
+                                        <span className="text-foreground">{providerResult.text}</span>
+                                      )
+                                    ) : (
+                                      <span className="text-red-600">识别失败: {providerResult.error}</span>
+                                    )}
+                                  </td>
+                                  <td className="border border-border px-3 py-2 text-center text-xs text-mutedForeground">
+                                    {providerResult.status === 'success' ? `${providerResult.duration.toFixed(1)}s` : '-'}
+                                  </td>
+                                  <td className="border border-border px-3 py-2 text-center text-xs text-mutedForeground">
+                                    {providerResult.status === 'success' && providerResult.confidence
+                                      ? `${(providerResult.confidence * 100).toFixed(0)}%`
+                                      : '-'}
+                                  </td>
+                                  {result.similarity && successResults.length > 1 && (
+                                    <td className="border border-border px-3 py-2 text-center">
+                                      {providerResult.status === 'success' && avgSimilarity !== undefined ? (
+                                        <span className="font-bold text-accent">{avgSimilarity.toFixed(1)}%</span>
+                                      ) : (
+                                        <span className="text-mutedForeground">-</span>
+                                      )}
+                                    </td>
+                                  )}
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      );
+                    })()}
                   </div>
 
                   {/* 详细对比矩阵 */}
