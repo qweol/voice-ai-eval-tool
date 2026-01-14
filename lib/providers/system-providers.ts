@@ -242,6 +242,76 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
+  // Azure Speech 预置配置
+  // 需要两个参数：AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
+  if (process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) {
+    const azureTemplate = templates.azure;
+    const region = process.env.AZURE_SPEECH_REGION;
+
+    // 替换 URL 中的 {region} 占位符
+    const apiUrl = azureTemplate.defaultApiUrl.replace('{region}', region);
+
+    providers.push({
+      id: 'system-azure',
+      name: 'Azure Speech（系统预置）',
+      type: 'generic',
+      serviceType: 'asr', // Azure 目前仅支持 ASR
+      apiUrl: apiUrl,
+      method: azureTemplate.defaultMethod,
+      authType: azureTemplate.authType, // 'custom'
+      apiKey: process.env.AZURE_SPEECH_KEY,
+      requestBody: azureTemplate.requestBodyTemplate.asr, // 使用 ASR 模板
+      responseTextPath: azureTemplate.responseTextPath,
+      responseAudioPath: azureTemplate.responseAudioPath,
+      responseAudioFormat: azureTemplate.responseAudioFormat,
+      errorPath: azureTemplate.errorPath,
+      templateType: 'azure',
+      selectedModels: {
+        asr: azureTemplate.defaultModel?.asr,
+        tts: undefined, // Azure 暂不支持 TTS
+      },
+      // 存储自定义的认证头，供 caller.ts 使用
+      requestHeaders: {
+        'Ocp-Apim-Subscription-Key': process.env.AZURE_SPEECH_KEY,
+        'Content-Type': 'application/json',
+      },
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
+  // Deepgram 预置配置
+  if (process.env.DEEPGRAM_API_KEY) {
+    const deepgramTemplate = templates.deepgram;
+
+    providers.push({
+      id: 'system-deepgram',
+      name: 'Deepgram（系统预置）',
+      type: 'generic',
+      serviceType: 'asr', // Deepgram 仅支持 ASR
+      apiUrl: deepgramTemplate.defaultApiUrl,
+      method: deepgramTemplate.defaultMethod,
+      authType: deepgramTemplate.authType,
+      apiKey: process.env.DEEPGRAM_API_KEY,
+      requestBody: deepgramTemplate.requestBodyTemplate.asr, // 使用 ASR 模板
+      responseTextPath: deepgramTemplate.responseTextPath,
+      responseAudioPath: deepgramTemplate.responseAudioPath,
+      responseAudioFormat: deepgramTemplate.responseAudioFormat,
+      errorPath: deepgramTemplate.errorPath,
+      templateType: 'deepgram',
+      selectedModels: {
+        asr: deepgramTemplate.defaultModel?.asr,
+        tts: undefined, // Deepgram 不支持 TTS
+      },
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
   return providers;
 }
 

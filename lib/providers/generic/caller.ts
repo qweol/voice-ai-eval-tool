@@ -325,6 +325,39 @@ export async function callGenericASR(
         headers,
         body: formData,
       });
+    } else if (config.templateType === 'deepgram') {
+      // Deepgram 使用二进制上传方式
+      // 通过 URL 查询参数传递模型和配置
+      const queryParams = new URLSearchParams({
+        model: modelId,
+        smart_format: 'true', // 启用智能格式化
+        language: options?.language || 'zh', // 语言提示（可选）
+      });
+
+      // 构建完整的 API URL
+      const fullUrl = `${apiUrl}?${queryParams.toString()}`;
+
+      // 构建认证头（Deepgram 使用 "Authorization: Token YOUR_API_KEY"）
+      const headers: Record<string, string> = {
+        'Content-Type': `audio/${options?.format || 'wav'}`,
+      };
+
+      if (config.apiKey) {
+        headers['Authorization'] = `Token ${config.apiKey}`;
+      }
+
+      console.log('=== Deepgram ASR API 调用信息 ===');
+      console.log('API URL:', fullUrl);
+      console.log('模型:', modelId);
+      console.log('格式:', options?.format);
+      console.log('音频大小:', audioBuffer.length, 'bytes');
+      console.log('语言:', options?.language || 'zh');
+
+      response = await fetch(fullUrl, {
+        method: config.method,
+        headers,
+        body: new Uint8Array(audioBuffer), // 将 Buffer 转换为 Uint8Array
+      });
     } else {
       // 其他API使用JSON格式
       let requestBody: any;

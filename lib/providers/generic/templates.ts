@@ -430,6 +430,74 @@ export const doubaoTemplate: APITemplate = {
 };
 
 /**
+ * Azure Speech 模型定义
+ */
+const azureModels: ModelDefinition[] = [
+  // ASR模型
+  {
+    id: 'azure-stt-multilingual',
+    name: 'Azure Speech to Text (多语言)',
+    description: 'Azure 语音识别服务，支持140+语言自动识别，使用 Fast Transcription API',
+    type: 'asr',
+    supportedLanguages: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'ru-RU', 'ar-SA', 'hi-IN', 'pt-BR', 'it-IT'],
+    maxFileSize: 200 * 1024 * 1024, // 200MB
+  },
+];
+
+/**
+ * Azure 风格模板
+ * 适用于：Microsoft Azure Speech Service - Fast Transcription API
+ *
+ * API文档: https://learn.microsoft.com/azure/ai-services/speech-service/fast-transcription-create
+ *
+ * 注意:
+ * - 使用 Fast Transcription API (2025-10-15 版本)
+ * - 使用 Ocp-Apim-Subscription-Key 认证
+ * - 支持多语言自动识别（无需指定语言参数）
+ * - 音频通过 Base64 编码上传
+ * - 支持多种音频格式: wav, mp3, ogg, flac, opus 等
+ * - 支持的区域: eastus, southeastasia, westeurope, centralindia
+ */
+export const azureTemplate: APITemplate = {
+  id: 'azure',
+  name: 'Azure风格',
+  description: '适用于 Microsoft Azure 语音识别服务 (Fast Transcription API)，支持140+语言自动识别',
+  defaultApiUrl: 'https://{region}.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15',
+  defaultMethod: 'POST',
+  authType: 'custom', // 使用自定义认证方式 (Ocp-Apim-Subscription-Key)
+  isBuiltin: true,
+  requestBodyTemplate: {
+    asr: JSON.stringify({
+      audio: {
+        data: '{audioBase64}',
+      },
+      locales: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'],
+    }, null, 2),
+    tts: undefined, // Azure 暂不支持 TTS（或需要单独配置）
+  },
+  responseTextPath: 'combinedPhrases[0].text',
+  responseAudioPath: undefined,
+  responseAudioFormat: undefined,
+  errorPath: 'error.message',
+  variables: [
+    { description: '模型名称', required: true, default: 'azure-stt-multilingual' },
+    { description: 'Azure 区域（如：eastus, southeastasia）', required: true, default: 'eastus' },
+  ],
+
+  // 模型列表
+  models: azureModels,
+
+  // 不允许自定义模型
+  allowCustomModel: false,
+
+  // 默认模型
+  defaultModel: {
+    asr: 'azure-stt-multilingual',
+    tts: undefined, // 暂不支持TTS
+  },
+};
+
+/**
  * Cartesia 风格模板
  * 适用于：Cartesia TTS API
  * 注意：
@@ -537,6 +605,38 @@ function getDefaultMinimaxVoices(): VoiceDefinition[] {
     },
   ];
 }
+
+/**
+ * Deepgram 模型定义
+ * 参考：https://developers.deepgram.com/docs/models-overview
+ */
+const deepgramModels: ModelDefinition[] = [
+  // ASR模型
+  {
+    id: 'nova-3',
+    name: 'Nova-3',
+    description: '最高性能的通用ASR模型，支持多语言、说话人分离、词级时间戳等高级功能',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+    maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
+  },
+  {
+    id: 'nova-2',
+    name: 'Nova-2',
+    description: '高性能ASR模型，支持更多语言和填充词识别',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+    maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
+  },
+  {
+    id: 'base',
+    name: 'Base',
+    description: '基础ASR模型，适合一般场景',
+    type: 'asr',
+    supportedLanguages: ['en'],
+    maxFileSize: 2 * 1024 * 1024 * 1024, // 2GB
+  },
+];
 
 /**
  * Minimax 音色定义（默认列表，用于模板初始化）
@@ -686,6 +786,56 @@ export const minimaxTemplate: APITemplate = {
 };
 
 /**
+ * Deepgram 风格模板
+ * 适用于：Deepgram Speech-to-Text API (Pre-recorded Audio)
+ *
+ * API文档: https://developers.deepgram.com/docs/pre-recorded-audio
+ *
+ * 注意:
+ * - 使用 Bearer Token 认证（Authorization: Token YOUR_API_KEY）
+ * - 直接上传二进制音频数据（不使用 JSON）
+ * - 通过 URL 查询参数传递模型和配置（如：?model=nova-3&smart_format=true）
+ * - 支持多语言自动识别
+ * - 支持说话人分离、词级时间戳等高级功能
+ * - 最大文件大小：2GB
+ */
+export const deepgramTemplate: APITemplate = {
+  id: 'deepgram',
+  name: 'Deepgram风格',
+  description: '适用于 Deepgram 语音识别服务，支持多语言、高精度转录',
+  defaultApiUrl: 'https://api.deepgram.com/v1/listen',
+  defaultMethod: 'POST',
+  authType: 'bearer',
+  isBuiltin: true,
+  requestBodyTemplate: {
+    // Deepgram 使用二进制上传，不需要 JSON 请求体模板
+    // 在 caller.ts 中会特殊处理
+    asr: undefined,
+    tts: undefined, // Deepgram 不支持 TTS
+  },
+  responseTextPath: 'results.channels[0].alternatives[0].transcript',
+  responseAudioPath: undefined,
+  responseAudioFormat: undefined,
+  errorPath: 'err_msg',
+  variables: [
+    { description: '模型名称（如：nova-3, nova-2, base）', required: true, default: 'nova-3' },
+    { description: '语言代码（如：zh, en）', required: false, default: 'zh' },
+  ],
+
+  // 模型列表
+  models: deepgramModels,
+
+  // 允许自定义模型
+  allowCustomModel: true,
+
+  // 默认模型
+  defaultModel: {
+    asr: 'nova-3',
+    tts: undefined, // 不支持 TTS
+  },
+};
+
+/**
  * 自定义模板（完全自定义）
  */
 export const customTemplate: APITemplate = {
@@ -720,8 +870,10 @@ export const templates: Record<TemplateType, APITemplate> = {
   openai: openaiTemplate,
   qwen: qwenTemplate,
   doubao: doubaoTemplate,
+  azure: azureTemplate,
   cartesia: cartesiaTemplate,
   minimax: minimaxTemplate,
+  deepgram: deepgramTemplate,
   custom: customTemplate,
 };
 
