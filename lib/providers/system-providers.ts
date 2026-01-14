@@ -110,7 +110,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
   }
 
   // Doubao/豆包 预置配置
-  // 需要两个参数：DOUBAO_APP_ID 和 DOUBAO_ACCESS_TOKEN
+  // 需要三个参数：DOUBAO_APP_ID, DOUBAO_ACCESS_TOKEN, DOUBAO_RESOURCE_ID
   if (process.env.DOUBAO_APP_ID && process.env.DOUBAO_ACCESS_TOKEN) {
     const doubaoTemplate = templates.doubao;
 
@@ -125,7 +125,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
       serviceType: 'asr', // 豆包目前仅支持 ASR
       apiUrl: apiUrl,
       method: doubaoTemplate.defaultMethod,
-      authType: doubaoTemplate.authType,
+      authType: doubaoTemplate.authType, // 'custom'
       apiKey: process.env.DOUBAO_ACCESS_TOKEN, // Access Token
       appId: process.env.DOUBAO_APP_ID, // App ID
       requestBody: doubaoTemplate.requestBodyTemplate.asr, // 使用 ASR 模板

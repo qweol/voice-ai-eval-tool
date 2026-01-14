@@ -372,7 +372,7 @@ const doubaoModels: ModelDefinition[] = [
  * API文档: https://www.volcengine.com/docs/6561/1631584
  *
  * 注意:
- * - 使用自定义Header认证 (X-Api-App-Key, X-Api-Access-Key)
+ * - 使用自定义Header认证 (X-Api-App-Key, X-Api-Access-Key, X-Api-Resource-Id)
  * - 音频通过Base64编码直接上传
  * - 支持多种音频格式: wav, mp3, ogg, pcm等
  * - 支持多语言自动识别
@@ -407,10 +407,10 @@ export const doubaoTemplate: APITemplate = {
       volume: '{volume}',
     }, null, 2),
   },
-  responseTextPath: 'text',
+  responseTextPath: 'result.text',
   responseAudioPath: 'result.audio',
   responseAudioFormat: 'base64',
-  errorPath: 'message',
+  errorPath: 'header.message',
   variables: [
     { description: '模型名称(bigmodel)', required: true, default: 'bigmodel' },
     { description: '用户ID', required: false, default: 'user_001' },

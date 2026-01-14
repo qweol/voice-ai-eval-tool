@@ -445,8 +445,8 @@ export async function callGenericASR(
       text = getValueByPath(responseData, 'output.choices[0].message.content[0].text') || '';
       console.log('📝 从 qwen3-asr-flash messages 格式中提取文本');
     } else if (config.templateType === 'doubao') {
-      // 豆包响应格式: text 字段直接包含识别结果
-      text = responseData.text || '';
+      // 豆包响应格式: result.text
+      text = getValueByPath(responseData, 'result.text') || '';
       console.log('📝 从豆包响应中提取文本');
     } else {
       // 其他模型使用配置的响应路径
