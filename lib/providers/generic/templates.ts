@@ -813,7 +813,7 @@ export const deepgramTemplate: APITemplate = {
     asr: undefined,
     tts: undefined, // Deepgram 不支持 TTS
   },
-  responseTextPath: 'results.channels[0].alternatives[0].transcript',
+  responseTextPath: 'result.text',
   responseAudioPath: undefined,
   responseAudioFormat: undefined,
   errorPath: 'err_msg',

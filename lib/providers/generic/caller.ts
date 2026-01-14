@@ -328,14 +328,45 @@ export async function callGenericASR(
     } else if (config.templateType === 'deepgram') {
       // Deepgram 使用二进制上传方式
       // 通过 URL 查询参数传递模型和配置
-      const queryParams = new URLSearchParams({
-        model: modelId,
+
+      // 获取语言参数
+      // 如果未指定语言，使用 detect_language=true 让 Deepgram 自动检测
+      const language = options?.language;
+      let actualModel = modelId;
+
+      // Nova-3 支持的语言列表
+      const nova3Languages = ['en', 'es', 'fr', 'pt', 'de', 'nl', 'sv', 'da', 'it', 'tr', 'no', 'id'];
+
+      // 如果指定了语言且选择了 nova-3 但语言不支持，自动降级到 base
+      if (language && modelId === 'nova-3' && !nova3Languages.includes(language)) {
+        actualModel = 'base';
+        console.log(`⚠️ Nova-3 不支持语言 "${language}"，自动切换到 base 模型`);
+      }
+
+      // 如果指定了语言且选择了 nova-2 但语言不支持，也降级到 base
+      if (language && modelId === 'nova-2' && !nova3Languages.includes(language)) {
+        actualModel = 'base';
+        console.log(`⚠️ Nova-2 不支持语言 "${language}"，自动切换到 base 模型`);
+      }
+
+      // 构建查询参数
+      const queryParams: Record<string, string> = {
+        model: actualModel,
         smart_format: 'true', // 启用智能格式化
-        language: options?.language || 'zh', // 语言提示（可选）
-      });
+      };
+
+      // 如果指定了语言，使用该语言；否则启用多语言检测
+      if (language) {
+        queryParams.language = language;
+      } else {
+        // 使用 detect_language 参数让 Deepgram 自动检测语言
+        queryParams.detect_language = 'true';
+      }
+
+      const queryString = new URLSearchParams(queryParams).toString();
 
       // 构建完整的 API URL
-      const fullUrl = `${apiUrl}?${queryParams.toString()}`;
+      const fullUrl = `${apiUrl}?${queryString}`;
 
       // 构建认证头（Deepgram 使用 "Authorization: Token YOUR_API_KEY"）
       const headers: Record<string, string> = {
@@ -348,10 +379,13 @@ export async function callGenericASR(
 
       console.log('=== Deepgram ASR API 调用信息 ===');
       console.log('API URL:', fullUrl);
-      console.log('模型:', modelId);
+      console.log('请求模型:', modelId);
+      console.log('实际模型:', actualModel);
       console.log('格式:', options?.format);
       console.log('音频大小:', audioBuffer.length, 'bytes');
-      console.log('语言:', options?.language || 'zh');
+      console.log('语言:', language || '自动检测（detect_language=true）');
+      console.log('Content-Type:', headers['Content-Type']);
+      console.log('Authorization:', headers['Authorization'] ? 'Token ***' : '未设置');
 
       response = await fetch(fullUrl, {
         method: config.method,
@@ -481,6 +515,24 @@ export async function callGenericASR(
       // 豆包响应格式: result.text
       text = getValueByPath(responseData, 'result.text') || '';
       console.log('📝 从豆包响应中提取文本');
+    } else if (config.templateType === 'deepgram') {
+      // Deepgram 支持两种响应格式：
+      // 1. 简化格式: result.text
+      // 2. 标准格式: results.channels[0].alternatives[0].transcript
+      // 注意：需要过滤空字符串，因为 Deepgram 可能返回 transcript: ""
+      const resultText = getValueByPath(responseData, 'result.text');
+      const transcriptText = getValueByPath(responseData, 'results.channels[0].alternatives[0].transcript');
+
+      console.log('🔍 Deepgram 文本提取调试:');
+      console.log('  - result.text 值:', JSON.stringify(resultText));
+      console.log('  - transcript 值:', JSON.stringify(transcriptText));
+      console.log('  - responseData 结构:', JSON.stringify(responseData).substring(0, 200));
+      console.log('  - metadata:', JSON.stringify(responseData.metadata));
+      console.log('  - 是否有错误:', responseData.error || responseData.err_msg || '无');
+
+      // 优先使用非空的文本
+      text = (resultText && resultText.trim()) || (transcriptText && transcriptText.trim()) || '';
+      console.log('📝 从 Deepgram 响应中提取文本，最终结果:', JSON.stringify(text));
     } else {
       // 其他模型使用配置的响应路径
       text = config.responseTextPath
