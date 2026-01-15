@@ -51,6 +51,68 @@ function getModelId(config: GenericProviderConfig, serviceType: 'asr' | 'tts'): 
 }
 
 /**
+ * 语言代码映射
+ * 将统一的语言代码映射到各供应商特定的格式
+ */
+function mapLanguageCode(language: string | undefined, templateType?: string): string | undefined {
+  if (!language || language === 'auto') {
+    return undefined; // 自动检测
+  }
+
+  // 语言代码映射表
+  const languageMap: Record<string, Record<string, string>> = {
+    // 豆包使用的语言代码
+    doubao: {
+      'zh': 'zh-CN',
+      'en': 'en-US',
+      'ja': 'ja-JP',
+      'ko': 'ko-KR',
+      'es': 'es-MX', // 豆包使用墨西哥西班牙语
+      'yue': 'zh-HK', // 粤语
+    },
+    // Azure 使用的语言代码
+    azure: {
+      'zh': 'zh-CN',
+      'en': 'en-US',
+      'ja': 'ja-JP',
+      'ko': 'ko-KR',
+      'es': 'es-ES',
+      'yue': 'zh-HK',
+    },
+    // Deepgram 使用简短代码
+    deepgram: {
+      'zh': 'zh',
+      'en': 'en',
+      'ja': 'ja',
+      'ko': 'ko',
+      'es': 'es',
+      'yue': 'zh',
+    },
+    // OpenAI Whisper 使用 ISO 639-1 代码
+    openai: {
+      'zh': 'zh',
+      'en': 'en',
+      'ja': 'ja',
+      'ko': 'ko',
+      'es': 'es',
+      'yue': 'zh', // Whisper 将粤语识别为中文
+    },
+    // Qwen 使用简短代码
+    qwen: {
+      'zh': 'zh',
+      'en': 'en',
+      'ja': 'ja',
+      'ko': 'ko',
+      'es': 'es',
+      'yue': 'yue',
+    },
+  };
+
+  const providerMap = languageMap[templateType || 'openai'] || languageMap.openai;
+  return providerMap[language] || language;
+}
+
+/**
  * 获取要使用的音色ID
  */
 function getVoiceId(config: GenericProviderConfig, optionsVoice?: string): string {
@@ -224,11 +286,14 @@ export async function callGenericASR(
     const audioBase64 = audioBuffer.toString('base64');
     const modelId = getModelId(config, 'asr');
 
+    // 映射语言代码到供应商特定格式
+    const mappedLanguage = mapLanguageCode(options?.language, config.templateType);
+
     const variables: RequestVariables = {
       audio: audioBase64,
       audioBase64: audioBase64,
       audio_url: audioBase64, // 保留用于其他可能需要的API
-      language: options?.language || 'zh',
+      language: mappedLanguage || '', // 使用映射后的语言代码，如果是 auto 则为空
       format: options?.format || 'wav',
       model: modelId,
       uid: 'user_001', // 豆包需要的用户ID
@@ -275,7 +340,10 @@ export async function callGenericASR(
       formData.append('file', audioBlob, `audio.${options?.format || 'wav'}`);
       formData.append('model', modelId);
 
-      // 所有 ASR 模型都使用自动语言检测，不传递 language 参数
+      // 如果指定了语言，添加 language 参数
+      if (mappedLanguage) {
+        formData.append('language', mappedLanguage);
+      }
 
       formData.append('response_format', 'json');
 
@@ -318,7 +386,7 @@ export async function callGenericASR(
       console.log('模型:', modelId);
       console.log('格式:', options?.format);
       console.log('音频大小:', audioBuffer.length, 'bytes');
-      console.log('语言检测: 自动检测（未指定语言参数）');
+      console.log('语言:', mappedLanguage || '自动检测');
 
       response = await fetch(apiUrl, {
         method: config.method,
@@ -338,9 +406,10 @@ export async function callGenericASR(
       formData.append('audio', audioBlob, `audio.${options?.format || 'wav'}`);
 
       // 添加 definition 参数（JSON 格式）
-      const definition = {
-        locales: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'], // 多语言候选列表
-      };
+      // 如果指定了语言，使用该语言；否则使用多语言候选列表
+      const definition = mappedLanguage
+        ? { locales: [mappedLanguage] }
+        : { locales: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'es-ES'] };
       formData.append('definition', JSON.stringify(definition));
 
       // 构建认证头（不包含 Content-Type）
@@ -354,7 +423,7 @@ export async function callGenericASR(
       console.log('模型:', modelId);
       console.log('格式:', options?.format);
       console.log('音频大小:', audioBuffer.length, 'bytes');
-      console.log('语言候选:', definition.locales.join(', '));
+      console.log('语言:', mappedLanguage || `多语言候选: ${definition.locales.join(', ')}`);
 
       response = await fetch(apiUrl, {
         method: config.method,
@@ -365,24 +434,22 @@ export async function callGenericASR(
       // Deepgram 使用二进制上传方式
       // 通过 URL 查询参数传递模型和配置
 
-      // 获取语言参数
-      // 如果未指定语言，使用 detect_language=true 让 Deepgram 自动检测
-      const language = options?.language;
+      // 使用映射后的语言参数
       let actualModel = modelId;
 
       // Nova-3 支持的语言列表
       const nova3Languages = ['en', 'es', 'fr', 'pt', 'de', 'nl', 'sv', 'da', 'it', 'tr', 'no', 'id'];
 
       // 如果指定了语言且选择了 nova-3 但语言不支持，自动降级到 base
-      if (language && modelId === 'nova-3' && !nova3Languages.includes(language)) {
+      if (mappedLanguage && modelId === 'nova-3' && !nova3Languages.includes(mappedLanguage)) {
         actualModel = 'base';
-        console.log(`⚠️ Nova-3 不支持语言 "${language}"，自动切换到 base 模型`);
+        console.log(`⚠️ Nova-3 不支持语言 "${mappedLanguage}"，自动切换到 base 模型`);
       }
 
       // 如果指定了语言且选择了 nova-2 但语言不支持，也降级到 base
-      if (language && modelId === 'nova-2' && !nova3Languages.includes(language)) {
+      if (mappedLanguage && modelId === 'nova-2' && !nova3Languages.includes(mappedLanguage)) {
         actualModel = 'base';
-        console.log(`⚠️ Nova-2 不支持语言 "${language}"，自动切换到 base 模型`);
+        console.log(`⚠️ Nova-2 不支持语言 "${mappedLanguage}"，自动切换到 base 模型`);
       }
 
       // 构建查询参数
@@ -392,8 +459,8 @@ export async function callGenericASR(
       };
 
       // 如果指定了语言，使用该语言；否则启用多语言检测
-      if (language) {
-        queryParams.language = language;
+      if (mappedLanguage) {
+        queryParams.language = mappedLanguage;
       } else {
         // 使用 detect_language 参数让 Deepgram 自动检测语言
         queryParams.detect_language = 'true';
@@ -419,7 +486,7 @@ export async function callGenericASR(
       console.log('实际模型:', actualModel);
       console.log('格式:', options?.format);
       console.log('音频大小:', audioBuffer.length, 'bytes');
-      console.log('语言:', language || '自动检测（detect_language=true）');
+      console.log('语言:', mappedLanguage || '自动检测（detect_language=true）');
       console.log('Content-Type:', headers['Content-Type']);
       console.log('Authorization:', headers['Authorization'] ? 'Token ***' : '未设置');
 
@@ -488,12 +555,23 @@ export async function callGenericASR(
         }
       }
 
-      // 所有 ASR 模型都使用自动语言检测，移除请求体中的 language 字段
+      // 豆包极速版不支持 language 参数，需要强制删除
       if (requestBody && typeof requestBody === 'object') {
-        delete requestBody.language;
-        // 如果存在 parameters.language，也删除
-        if (requestBody.parameters && typeof requestBody.parameters === 'object') {
-          delete requestBody.parameters.language;
+        if (config.templateType === 'doubao' && modelId === 'bigmodel-flash') {
+          // 极速版：强制删除 language 参数
+          if (requestBody.request && typeof requestBody.request === 'object') {
+            delete requestBody.request.language;
+          }
+          console.log('⚠️ 豆包极速版不支持 language 参数，已自动移除');
+        } else if (!mappedLanguage) {
+          // 其他情况：如果语言参数为空，清理请求体中的 language 字段
+          delete requestBody.language;
+          if (requestBody.parameters && typeof requestBody.parameters === 'object') {
+            delete requestBody.parameters.language;
+          }
+          if (requestBody.request && typeof requestBody.request === 'object') {
+            delete requestBody.request.language;
+          }
         }
       }
 
@@ -503,6 +581,7 @@ export async function callGenericASR(
       console.log('=== ASR API 调用信息 ===');
       console.log('API URL:', apiUrl);
       console.log('模型:', modelId);
+      console.log('语言:', mappedLanguage || '自动检测');
       console.log('请求体（前500字符）:', JSON.stringify(requestBody).substring(0, 500));
       console.log('请求头:', JSON.stringify(headers, null, 2));
 
@@ -549,9 +628,11 @@ export async function callGenericASR(
       text = getValueByPath(responseData, 'output.choices[0].message.content[0].text') || '';
       console.log('📝 从 qwen3-asr-flash messages 格式中提取文本');
     } else if (config.templateType === 'doubao') {
-      // 豆包响应格式: result.text
-      text = getValueByPath(responseData, 'result.text') || '';
-      console.log('📝 从豆包响应中提取文本');
+      // 豆包极速版响应格式: result.text (官方文档格式)
+      // 响应结构: {"audio_info": {...}, "result": {"text": "...", "utterances": [...]}}
+      const resultText = getValueByPath(responseData, 'result.text');
+      text = resultText || '';
+      console.log('📝 从豆包响应中提取文本，路径: result.text');
     } else if (config.templateType === 'deepgram') {
       // Deepgram 支持两种响应格式：
       // 1. 简化格式: result.text

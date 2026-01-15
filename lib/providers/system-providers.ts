@@ -135,7 +135,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
       errorPath: doubaoTemplate.errorPath,
       templateType: 'doubao',
       selectedModels: {
-        asr: doubaoTemplate.defaultModel?.asr,
+        asr: 'bigmodel-flash', // 默认使用极速版
         tts: undefined, // 豆包暂不支持 TTS
       },
       // 存储自定义的 Resource ID，供 caller.ts 使用

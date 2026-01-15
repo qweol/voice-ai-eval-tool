@@ -75,6 +75,7 @@ export default function ASRPage() {
   // 共用状态
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
   const [format, setFormat] = useState('wav');
+  const [language, setLanguage] = useState('auto'); // 语言选择
   const [showSampleLibrary, setShowSampleLibrary] = useState(false);
   const [selectedSample, setSelectedSample] = useState<AsrSample | null>(null);
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([]);
@@ -226,6 +227,7 @@ export default function ASRPage() {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('format', format);
+      formData.append('language', language); // 添加语言参数
       formData.append('providers', JSON.stringify(selectedProviders));
 
       const res = await fetch('/api/asr', {
@@ -266,6 +268,7 @@ export default function ASRPage() {
         const formData = new FormData();
         formData.append('file', audioFile);
         formData.append('format', audioFormat);
+        formData.append('language', language); // 添加语言参数
         formData.append('providers', JSON.stringify([provider]));
 
         const res = await fetch('/api/asr', {
@@ -512,6 +515,24 @@ export default function ASRPage() {
               )}
             </>
           )}
+
+          {/* 语言选择 */}
+          <div className="border-t-2 border-border pt-6 mb-6">
+            <h3 className="text-xl font-heading font-bold mb-4">识别语言</h3>
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="w-full px-4 py-2 border-2 border-border rounded-lg bg-background text-foreground font-medium focus:outline-none focus:ring-2 focus:ring-accent"
+            >
+              <option value="auto">自动检测</option>
+              <option value="zh">中文</option>
+              <option value="en">英文</option>
+              <option value="ja">日语</option>
+              <option value="ko">韩语</option>
+              <option value="es">西班牙语</option>
+              <option value="yue">粤语</option>
+            </select>
+          </div>
 
           {/* 供应商选择 */}
             <div className="border-t-2 border-border pt-6 mb-6">

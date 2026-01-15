@@ -354,13 +354,22 @@ const cartesiaModels: ModelDefinition[] = [
  * 豆包模型定义
  */
 const doubaoModels: ModelDefinition[] = [
-  // ASR模型
+  // ASR模型 - 极速版
   {
-    id: 'bigmodel',
-    name: '豆包录音文件识别2.0',
-    description: '基于大模型的录音文件识别服务,支持多语言自动识别,高准确率',
+    id: 'bigmodel-flash',
+    name: '豆包录音文件识别极速版',
+    description: '基于大模型的录音文件识别服务,极速返回,不支持语言参数',
     type: 'asr',
     supportedLanguages: ['zh', 'en', 'ja', 'ko', 'yue', 'wuu', 'nan', 'hsn', 'sxn'],
+    maxFileSize: 100 * 1024 * 1024, // 100MB
+  },
+  // ASR模型 - 标准版
+  {
+    id: 'bigmodel',
+    name: '豆包录音文件识别标准版',
+    description: '基于大模型的录音文件识别服务,支持语言参数,支持多语言识别',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'yue', 'wuu', 'nan', 'hsn', 'sxn'],
     maxFileSize: 100 * 1024 * 1024, // 100MB
   },
 ];
@@ -395,6 +404,7 @@ export const doubaoTemplate: APITemplate = {
       },
       request: {
         model_name: '{model}',
+        language: '{language}',
         enable_itn: true,
         enable_punc: true,
       },

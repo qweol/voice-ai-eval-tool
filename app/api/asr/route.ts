@@ -9,6 +9,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const format = (formData.get('format') as string) || 'wav';
+    const language = formData.get('language') as string; // 获取语言参数
     const providersStr = formData.get('providers') as string;
 
     if (!file) {
@@ -63,9 +64,10 @@ export async function POST(request: NextRequest) {
       return provider;
     });
 
-    // 构建ASR选项（所有 ASR 模型都使用自动语言检测，不传递 language 参数）
+    // 构建ASR选项
     const asrOptions: ASROptions = {
       format,
+      language: language || 'auto', // 默认为自动检测
     };
 
     // 筛选支持ASR的提供者
