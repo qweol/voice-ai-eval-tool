@@ -843,9 +843,11 @@ export default function ASRPage() {
         )}
 
         {/* 批量结果展示 - 按音频分组 */}
-        {batchResults.length > 0 && !batchLoading && isBatchMode && (
+        {batchResults.length > 0 && isBatchMode && (
           <div className="space-y-3">
-            <h2 className="text-2xl font-heading font-bold">批量识别结果</h2>
+            <h2 className="text-2xl font-heading font-bold">
+              批量识别结果 {batchLoading && `(${batchProgress.current}/${batchProgress.total})`}
+            </h2>
 
             {batchResults.map((result, index) => (
               <Card key={index} hover={false}>

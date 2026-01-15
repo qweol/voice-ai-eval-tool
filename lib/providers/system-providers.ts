@@ -313,6 +313,36 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
+  // Gemini 预置配置
+  if (process.env.GEMINI_API_KEY) {
+    const geminiTemplate = templates.gemini;
+
+    providers.push({
+      id: 'system-gemini',
+      name: 'Gemini（系统预置）',
+      type: 'generic',
+      serviceType: 'asr', // Gemini 仅支持 ASR
+      apiUrl: geminiTemplate.defaultApiUrl,
+      method: geminiTemplate.defaultMethod,
+      authType: geminiTemplate.authType,
+      apiKey: process.env.GEMINI_API_KEY,
+      requestBody: geminiTemplate.requestBodyTemplate.asr, // 使用 ASR 模板
+      responseTextPath: geminiTemplate.responseTextPath,
+      responseAudioPath: geminiTemplate.responseAudioPath,
+      responseAudioFormat: geminiTemplate.responseAudioFormat,
+      errorPath: geminiTemplate.errorPath,
+      templateType: 'gemini',
+      selectedModels: {
+        asr: geminiTemplate.defaultModel?.asr,
+        tts: undefined, // Gemini 不支持 TTS
+      },
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
   return providers;
 }
 

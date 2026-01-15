@@ -617,6 +617,94 @@ function getDefaultMinimaxVoices(): VoiceDefinition[] {
 }
 
 /**
+ * Gemini 模型定义
+ * 参考：https://ai.google.dev/gemini-api/docs/audio
+ */
+const geminiModels: ModelDefinition[] = [
+  // ASR模型
+  {
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    description: '高性能多模态模型，支持音频转录、摘要和翻译，可处理长达8.4小时的音频',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+    maxFileSize: 100 * 1024 * 1024, // 100MB (估计值)
+  },
+  {
+    id: 'gemini-3-flash',
+    name: 'Gemini 3 Flash Preview',
+    description: '最新的 Gemini 模型，提供更快的性能和更低的成本，支持高级推理和多模态理解',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+    maxFileSize: 100 * 1024 * 1024, // 100MB (估计值)
+  },
+];
+
+/**
+ * Gemini 风格模板
+ * 适用于：Google Gemini API (Audio Transcription)
+ *
+ * API文档: https://ai.google.dev/gemini-api/docs/audio
+ *
+ * 注意:
+ * - 使用 API Key 认证（通过 x-goog-api-key 头或 URL 参数）
+ * - 支持文件 URI 或 base64 编码的音频数据
+ * - 通过 prompt 控制转录行为（如：语言检测、时间戳、说话人识别等）
+ * - 支持多语言自动识别和翻译
+ * - 可处理长达约 8.4 小时的音频文件
+ */
+export const geminiTemplate: APITemplate = {
+  id: 'gemini',
+  name: 'Gemini风格',
+  description: '适用于 Google Gemini API 语音识别服务，支持多语言、长音频转录',
+  defaultApiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+  defaultMethod: 'POST',
+  authType: 'apikey',
+  isBuiltin: true,
+  requestBodyTemplate: {
+    // Gemini 使用特殊的多模态格式
+    asr: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              inline_data: {
+                mime_type: '{mimeType}',
+                data: '{audioBase64}'
+              }
+            },
+            {
+              text: 'Transcribe this audio file accurately. Provide the transcription text only.'
+            }
+          ]
+        }
+      ]
+    }, null, 2),
+    tts: undefined, // Gemini 主要用于 ASR，TTS 功能有限
+  },
+  responseTextPath: 'candidates.0.content.parts.0.text',
+  responseAudioPath: undefined,
+  responseAudioFormat: undefined,
+  errorPath: 'error.message',
+  variables: [
+    { description: '模型名称（如：gemini-2.5-flash, gemini-3-flash）', required: true, default: 'gemini-2.5-flash' },
+    { description: '语言代码（如：zh, en）', required: false, default: 'zh' },
+  ],
+
+  // 模型列表
+  models: geminiModels,
+
+  // 允许自定义模型
+  allowCustomModel: true,
+
+  // 默认模型
+  defaultModel: {
+    asr: 'gemini-2.5-flash',
+    tts: undefined, // 不支持 TTS
+  },
+};
+
+/**
  * Deepgram 模型定义
  * 参考：https://developers.deepgram.com/docs/models-overview
  */
@@ -884,6 +972,7 @@ export const templates: Record<TemplateType, APITemplate> = {
   cartesia: cartesiaTemplate,
   minimax: minimaxTemplate,
   deepgram: deepgramTemplate,
+  gemini: geminiTemplate,
   custom: customTemplate,
 };
 
