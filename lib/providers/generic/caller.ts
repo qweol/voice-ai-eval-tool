@@ -325,6 +325,42 @@ export async function callGenericASR(
         headers,
         body: formData,
       });
+    } else if (config.templateType === 'azure') {
+      // Azure 使用 multipart/form-data 格式
+      const formData = new FormData();
+
+      // 创建 Blob 对象
+      const audioBlob = new Blob([new Uint8Array(audioBuffer)], {
+        type: `audio/${options?.format || 'wav'}`
+      });
+
+      // 添加音频文件
+      formData.append('audio', audioBlob, `audio.${options?.format || 'wav'}`);
+
+      // 添加 definition 参数（JSON 格式）
+      const definition = {
+        locales: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'], // 多语言候选列表
+      };
+      formData.append('definition', JSON.stringify(definition));
+
+      // 构建认证头（不包含 Content-Type）
+      const headers: Record<string, string> = {};
+      if (config.apiKey) {
+        headers['Ocp-Apim-Subscription-Key'] = config.apiKey;
+      }
+
+      console.log('=== Azure ASR API 调用信息 ===');
+      console.log('API URL:', apiUrl);
+      console.log('模型:', modelId);
+      console.log('格式:', options?.format);
+      console.log('音频大小:', audioBuffer.length, 'bytes');
+      console.log('语言候选:', definition.locales.join(', '));
+
+      response = await fetch(apiUrl, {
+        method: config.method,
+        headers,
+        body: formData,
+      });
     } else if (config.templateType === 'deepgram') {
       // Deepgram 使用二进制上传方式
       // 通过 URL 查询参数传递模型和配置
@@ -468,6 +504,7 @@ export async function callGenericASR(
       console.log('API URL:', apiUrl);
       console.log('模型:', modelId);
       console.log('请求体（前500字符）:', JSON.stringify(requestBody).substring(0, 500));
+      console.log('请求头:', JSON.stringify(headers, null, 2));
 
       response = await fetch(apiUrl, {
         method: config.method,

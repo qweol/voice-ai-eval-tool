@@ -274,6 +274,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
       requestHeaders: {
         'Ocp-Apim-Subscription-Key': process.env.AZURE_SPEECH_KEY,
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
       },
       enabled: true,
       // 系统预置标识
