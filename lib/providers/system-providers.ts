@@ -313,20 +313,28 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
-  // Gemini 预置配置
-  if (process.env.GEMINI_API_KEY) {
+  // Gemini (Vertex AI) 预置配置
+  if (process.env.VERTEX_AI_PROJECT_ID && process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON) {
     const geminiTemplate = templates.gemini;
+    const projectId = process.env.VERTEX_AI_PROJECT_ID;
+    const location = process.env.VERTEX_AI_LOCATION || 'global';
+
+    // 构建 Vertex AI API URL
+    const apiUrl = geminiTemplate.defaultApiUrl
+      .replace('{projectId}', projectId)
+      .replace('{location}', location)
+      .replace('{model}', 'gemini-2.5-flash'); // 默认模型
 
     providers.push({
       id: 'system-gemini',
       name: 'Gemini（系统预置）',
       type: 'generic',
       serviceType: 'asr', // Gemini 仅支持 ASR
-      apiUrl: geminiTemplate.defaultApiUrl,
+      apiUrl: apiUrl,
       method: geminiTemplate.defaultMethod,
       authType: geminiTemplate.authType,
-      apiKey: process.env.GEMINI_API_KEY,
-      requestBody: geminiTemplate.requestBodyTemplate.asr, // 使用 ASR 模板
+      apiKey: process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON, // 存储服务账号 JSON
+      requestBody: geminiTemplate.requestBodyTemplate.asr,
       responseTextPath: geminiTemplate.responseTextPath,
       responseAudioPath: geminiTemplate.responseAudioPath,
       responseAudioFormat: geminiTemplate.responseAudioFormat,
@@ -334,10 +342,14 @@ export function getSystemProviders(): GenericProviderConfig[] {
       templateType: 'gemini',
       selectedModels: {
         asr: geminiTemplate.defaultModel?.asr,
-        tts: undefined, // Gemini 不支持 TTS
+        tts: undefined,
+      },
+      // 存储 Vertex AI 配置
+      requestHeaders: {
+        'X-Vertex-AI-Project-ID': projectId,
+        'X-Vertex-AI-Location': location,
       },
       enabled: true,
-      // 系统预置标识
       isSystem: true,
       readonly: true,
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });

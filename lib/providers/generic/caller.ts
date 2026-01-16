@@ -495,6 +495,53 @@ export async function callGenericASR(
         headers,
         body: new Uint8Array(audioBuffer), // 将 Buffer 转换为 Uint8Array
       });
+    } else if (config.templateType === 'gemini') {
+      // Gemini (Vertex AI) 使用特殊的多模态格式
+      // 1. 检测音频格式的 MIME 类型
+      const mimeType = `audio/${options?.format || 'wav'}`;
+
+      // 2. 替换 URL 中的 {model} 占位符
+      apiUrl = apiUrl.replace('{model}', modelId);
+
+      // 3. 获取 Vertex AI 访问令牌
+      const { getCachedVertexAIAccessToken } = await import('./vertex-ai-auth');
+      const accessToken = await getCachedVertexAIAccessToken(config.apiKey || '');
+
+      // 4. 构建请求体
+      const requestBody = {
+        contents: [
+          {
+            parts: [
+              {
+                inline_data: {
+                  mime_type: mimeType,
+                  data: audioBase64
+                }
+              },
+              {
+                text: 'Transcribe this audio file accurately. Provide the transcription text only.'
+              }
+            ]
+          }
+        ]
+      };
+
+      console.log('=== Gemini (Vertex AI) ASR API 调用信息 ===');
+      console.log('API URL:', apiUrl);
+      console.log('模型:', modelId);
+      console.log('格式:', options?.format);
+      console.log('MIME类型:', mimeType);
+      console.log('音频大小:', audioBuffer.length, 'bytes');
+      console.log('语言:', mappedLanguage || '自动检测');
+
+      response = await fetch(apiUrl, {
+        method: config.method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      });
     } else {
       // 其他API使用JSON格式
       let requestBody: any;

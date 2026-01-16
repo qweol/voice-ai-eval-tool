@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Upload, Play, Database } from 'lucide-react';
+import { ArrowLeft, Upload, Play, Database, Languages } from 'lucide-react';
 import { getConfig, getAllEnabledProvidersWithSystem } from '@/lib/utils/config';
 import { GenericProviderConfig, ModelDefinition } from '@/lib/providers/generic/types';
 import { templates } from '@/lib/providers/generic/templates';
@@ -25,6 +25,9 @@ interface ASRResult {
   confidence?: number;
   providerId?: string;
   modelId?: string;
+  translatedText?: string;
+  showTranslation?: boolean;
+  translating?: boolean;
 }
 
 interface ProviderModel {
@@ -48,6 +51,9 @@ interface BatchASRResult {
     duration: number;
     status: 'success' | 'error';
     error?: string;
+    translatedText?: string;
+    showTranslation?: boolean;
+    translating?: boolean;
   }[];
   expectedText?: string;
   similarity?: SimilarityInfo;
@@ -253,6 +259,56 @@ export default function ASRPage() {
     }
   };
 
+  // 翻译单个结果
+  const translateResult = async (index: number) => {
+    const result = results[index];
+    if (!result || result.status !== 'success' || !result.text) return;
+
+    // 设置翻译中状态
+    setResults(prev => prev.map((r, i) =>
+      i === index ? { ...r, translating: true } : r
+    ));
+
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: result.text }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('Translation API error:', res.status, errorData);
+        throw new Error(`翻译失败: ${errorData.message || res.statusText}`);
+      }
+
+      const data = await res.json();
+
+      // 更新结果，添加翻译文本并显示翻译
+      setResults(prev => prev.map((r, i) =>
+        i === index ? {
+          ...r,
+          translatedText: data.translatedText,
+          showTranslation: true,
+          translating: false
+        } : r
+      ));
+    } catch (error: any) {
+      console.error('Translation error:', error);
+      alert(error.message || '翻译失败，请检查配置');
+      setResults(prev => prev.map((r, i) =>
+        i === index ? { ...r, translating: false } : r
+      ));
+    }
+  };
+
+  // 切换显示原文/译文
+  const toggleTranslation = (index: number) => {
+    setResults(prev => prev.map((r, i) =>
+      i === index ? { ...r, showTranslation: !r.showTranslation } : r
+    ));
+  };
+
   // 为单个音频调用多个供应商
   const recognizeAudioWithProviders = async (
     audioFile: File,
@@ -310,6 +366,77 @@ export default function ASRPage() {
     }
 
     return results;
+  };
+
+  // 批量模式：翻译某个音频的某个结果
+  const translateBatchResult = async (audioIndex: number, resultIndex: number) => {
+    const batchResult = batchResults[audioIndex];
+    const result = batchResult?.results[resultIndex];
+    if (!result || result.status !== 'success' || !result.text) return;
+
+    // 设置翻译中状态
+    setBatchResults(prev => prev.map((br, ai) =>
+      ai === audioIndex ? {
+        ...br,
+        results: br.results.map((r, ri) =>
+          ri === resultIndex ? { ...r, translating: true } : r
+        )
+      } : br
+    ));
+
+    try {
+      const res = await fetch('/api/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: result.text }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('Translation API error:', res.status, errorData);
+        throw new Error(`翻译失败: ${errorData.message || res.statusText}`);
+      }
+
+      const data = await res.json();
+
+      // 更新结果
+      setBatchResults(prev => prev.map((br, ai) =>
+        ai === audioIndex ? {
+          ...br,
+          results: br.results.map((r, ri) =>
+            ri === resultIndex ? {
+              ...r,
+              translatedText: data.translatedText,
+              showTranslation: true,
+              translating: false
+            } : r
+          )
+        } : br
+      ));
+    } catch (error: any) {
+      console.error('Translation error:', error);
+      alert(error.message || '翻译失败，请检查配置');
+      setBatchResults(prev => prev.map((br, ai) =>
+        ai === audioIndex ? {
+          ...br,
+          results: br.results.map((r, ri) =>
+            ri === resultIndex ? { ...r, translating: false } : r
+          )
+        } : br
+      ));
+    }
+  };
+
+  // 批量模式：切换显示原文/译文
+  const toggleBatchTranslation = (audioIndex: number, resultIndex: number) => {
+    setBatchResults(prev => prev.map((br, ai) =>
+      ai === audioIndex ? {
+        ...br,
+        results: br.results.map((r, ri) =>
+          ri === resultIndex ? { ...r, showTranslation: !r.showTranslation } : r
+        )
+      } : br
+    ));
   };
 
   // 切换相似度详情展开状态
@@ -700,7 +827,33 @@ export default function ASRPage() {
                       </td>
                       <td className="border-2 border-border px-4 py-3">
                         {result.status === 'success' ? (
-                          <span className="text-foreground">{result.text}</span>
+                          <div className="space-y-2">
+                            <div className="text-foreground">
+                              {result.showTranslation && result.translatedText
+                                ? result.translatedText
+                                : result.text}
+                            </div>
+                            <div className="flex gap-2">
+                              {!result.translatedText ? (
+                                <button
+                                  onClick={() => translateResult(i)}
+                                  disabled={result.translating}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-accent/10 hover:bg-accent/20 text-accent rounded transition-colors disabled:opacity-50"
+                                >
+                                  <Languages className="w-3 h-3" />
+                                  {result.translating ? '翻译中...' : '翻译'}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => toggleTranslation(i)}
+                                  className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-accent/10 hover:bg-accent/20 text-accent rounded transition-colors"
+                                >
+                                  <Languages className="w-3 h-3" />
+                                  {result.showTranslation ? '显示原文' : '显示译文'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         ) : (
                           <span className="text-red-600 font-medium">{result.error || '识别失败'}</span>
                         )}
@@ -932,11 +1085,39 @@ export default function ASRPage() {
                                   </td>
                                   <td className="border border-border px-3 py-2">
                                     {providerResult.status === 'success' ? (
-                                      highlightedSegments.length > 0 && successIndex >= 0 ? (
-                                        <HighlightedText segments={highlightedSegments[successIndex]} />
-                                      ) : (
-                                        <span className="text-foreground">{providerResult.text}</span>
-                                      )
+                                      <div className="space-y-2">
+                                        <div>
+                                          {providerResult.showTranslation && providerResult.translatedText ? (
+                                            <span className="text-foreground">{providerResult.translatedText}</span>
+                                          ) : (
+                                            highlightedSegments.length > 0 && successIndex >= 0 ? (
+                                              <HighlightedText segments={highlightedSegments[successIndex]} />
+                                            ) : (
+                                              <span className="text-foreground">{providerResult.text}</span>
+                                            )
+                                          )}
+                                        </div>
+                                        <div className="flex gap-2">
+                                          {!providerResult.translatedText ? (
+                                            <button
+                                              onClick={() => translateBatchResult(index, idx)}
+                                              disabled={providerResult.translating}
+                                              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-accent/10 hover:bg-accent/20 text-accent rounded transition-colors disabled:opacity-50"
+                                            >
+                                              <Languages className="w-3 h-3" />
+                                              {providerResult.translating ? '翻译中...' : '翻译'}
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={() => toggleBatchTranslation(index, idx)}
+                                              className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-accent/10 hover:bg-accent/20 text-accent rounded transition-colors"
+                                            >
+                                              <Languages className="w-3 h-3" />
+                                              {providerResult.showTranslation ? '显示原文' : '显示译文'}
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
                                     ) : (
                                       <span className="text-red-600">识别失败: {providerResult.error}</span>
                                     )}

@@ -642,24 +642,25 @@ const geminiModels: ModelDefinition[] = [
 
 /**
  * Gemini 风格模板
- * 适用于：Google Gemini API (Audio Transcription)
+ * 适用于：Google Vertex AI Gemini API (Audio Transcription)
  *
- * API文档: https://ai.google.dev/gemini-api/docs/audio
+ * API文档: https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini
  *
  * 注意:
- * - 使用 API Key 认证（通过 x-goog-api-key 头或 URL 参数）
- * - 支持文件 URI 或 base64 编码的音频数据
+ * - 使用 Vertex AI 服务账号认证（OAuth2）
+ * - 支持 base64 编码的音频数据（inline_data）
  * - 通过 prompt 控制转录行为（如：语言检测、时间戳、说话人识别等）
  * - 支持多语言自动识别和翻译
  * - 可处理长达约 8.4 小时的音频文件
+ * - URL 格式: https://{location}-aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{model}:generateContent
  */
 export const geminiTemplate: APITemplate = {
   id: 'gemini',
   name: 'Gemini风格',
-  description: '适用于 Google Gemini API 语音识别服务，支持多语言、长音频转录',
-  defaultApiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
+  description: '适用于 Google Vertex AI Gemini 语音识别服务，支持多语言、长音频转录',
+  defaultApiUrl: 'https://global-aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{model}:generateContent',
   defaultMethod: 'POST',
-  authType: 'apikey',
+  authType: 'custom', // 使用 custom 类型，通过 OAuth2 Bearer Token 认证
   isBuiltin: true,
   requestBodyTemplate: {
     // Gemini 使用特殊的多模态格式
