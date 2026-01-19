@@ -89,6 +89,7 @@ export async function executeTtsJob(jobId: string, payload: TtsExecutePayload): 
     const ttsOptions: TTSOptions = {
       voice,
       speed: providerSpeed,
+      language: options?.language || 'auto', // 添加语言参数，默认为自动检测
     };
     return {
       name: provider.name,

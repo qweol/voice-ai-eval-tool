@@ -79,6 +79,7 @@ export default function TTSPage() {
   const [loading, setLoading] = useState(false);
   const [speed, setSpeed] = useState(1.0);
   const [cartesiaSpeed, setCartesiaSpeed] = useState(1.0); // Cartesia专用速度控制 (0.6-1.5)
+  const [language, setLanguage] = useState('auto'); // 语言选择：auto, zh, en, yue
   const [batchCount, setBatchCount] = useState(3);
   const [ttsProgress, setTtsProgress] = useState<{
     status: string;
@@ -278,6 +279,7 @@ export default function TTSPage() {
           options: {
             speed, // 默认速度
             cartesiaSpeed, // Cartesia专用速度
+            language, // 语言选择
           },
           batchCount: runBatchCount,
           providerVoices: selectedProviderVoices,
@@ -1072,6 +1074,27 @@ export default function TTSPage() {
                   </div>
                   <p className="text-xs text-mutedForeground mt-2">
                     Cartesia Sonic3 专用（官方限制范围）
+                  </p>
+                </div>
+
+                {/* 语言选择 */}
+                <div>
+                  <label className="block text-sm font-bold uppercase tracking-wide text-foreground mb-3">
+                    语言选择
+                  </label>
+                  <select
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                    className="w-full border-2 border-border rounded-lg px-4 py-2 bg-input text-foreground focus:outline-none focus:border-accent focus:shadow-pop transition-all duration-300 font-medium"
+                    disabled={loading}
+                  >
+                    <option value="auto">自动识别</option>
+                    <option value="zh">中文</option>
+                    <option value="en">英语</option>
+                    <option value="yue">粤语</option>
+                  </select>
+                  <p className="text-xs text-mutedForeground mt-2">
+                    选择"自动识别"将测试模型的语言识别能力
                   </p>
                 </div>
               </div>

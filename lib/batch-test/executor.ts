@@ -120,6 +120,7 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             const result = await callGenericTTS(providerConfig, testCase.text, {
               speed,
               voice: testCase.expectedVoice || undefined,
+              language: config.language || 'auto', // 添加语言参数，默认为自动检测
             });
             const endToEndTime = Date.now() - overallStart;
             const endToEndDurationSeconds = endToEndTime / 1000;

@@ -541,10 +541,10 @@ export const cartesiaTemplate: APITemplate = {
         encoding: 'pcm_s16le',
         sample_rate: 24000,
       },
-      language: '{language}',
       generation_config: {
         speed: '{speed}',
       },
+      language: '{language}',
     }, null, 2),
   },
   responseTextPath: undefined, // Cartesia 不支持 ASR

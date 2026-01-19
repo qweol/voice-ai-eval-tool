@@ -183,8 +183,14 @@ function replaceVariables(template: string, variables: RequestVariables): string
     }
   }
 
-  // 移除未替换的变量（可选，也可以保留）
-  // result = result.replace(/\{[^}]+\}/g, '');
+  // 移除包含未替换变量的简单键值对行（只匹配 "key": "{value}" 格式）
+  // 这个正则只匹配简单的字符串值，不会匹配嵌套对象
+  result = result.replace(/,?\s*"[^"]+"\s*:\s*"\{[^}]+\}"\s*,?\n?/g, '');
+
+  // 清理可能产生的多余逗号（JSON 对象中的尾随逗号）
+  result = result.replace(/,(\s*[}\]])/g, '$1');
+  // 清理连续的逗号
+  result = result.replace(/,\s*,/g, ',');
 
   return result;
 }
@@ -771,27 +777,37 @@ export async function callGenericTTS(
       'ru': 'Russian',
       'ar': 'Arabic',
       'hi': 'Hindi',
+      'yue': 'Cantonese', // 粤语
     };
-    const detectDefaultLanguage = (): string => {
+    const detectDefaultLanguage = (): string | undefined => {
+      // 如果明确传入了 language 参数
       if (options?.language) {
+        // 如果是 'auto'，返回 undefined，让模型自己识别
+        if (options.language === 'auto') {
+          return undefined;
+        }
         return options.language;
       }
-      if (config.templateType === 'cartesia') {
-        return /[\u4e00-\u9fff]/.test(text) ? 'zh' : 'en';
-      }
-      return 'zh';
+      // 如果没有传 language 参数，默认让模型自动识别
+      return undefined;
     };
 
     const language = detectDefaultLanguage();
-    const languageType = languageTypeMap[language] || 'Chinese';
+    const languageType = language ? (languageTypeMap[language] || 'Chinese') : undefined;
+
+    // 根据供应商类型选择正确的速度参数
+    let speedValue = options?.speed !== undefined ? options.speed : 1.0;
+    if (config.templateType === 'cartesia' && options?.cartesiaSpeed !== undefined) {
+      speedValue = options.cartesiaSpeed;
+    }
 
     const variables: RequestVariables = {
       text,
       model: modelId,
       voice: voiceId,
-      speed: options?.speed !== undefined ? options.speed : 1.0,
-      language: language,
-      language_type: languageType, // Qwen3-TTS 需要的语言类型
+      speed: speedValue,
+      language: language, // auto 模式时为 undefined，让模型自己识别
+      language_type: languageType, // auto 模式时为 undefined
       format: 'wav', // 统一使用 WAV 格式
       sample_rate: 24000, // 统一使用 24kHz 采样率
     };

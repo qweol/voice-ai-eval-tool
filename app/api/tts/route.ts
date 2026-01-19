@@ -121,6 +121,7 @@ export async function POST(request: NextRequest) {
       const ttsOptions: TTSOptions = {
         voice,
         speed: options?.speed,
+        language: options?.language || 'auto', // 添加语言参数，默认为自动检测
       };
 
       return {
