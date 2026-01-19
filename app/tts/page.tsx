@@ -1092,6 +1092,8 @@ export default function TTSPage() {
                     <option value="zh">中文</option>
                     <option value="en">英语</option>
                     <option value="yue">粤语</option>
+                    <option value="es">西班牙语</option>
+                    <option value="ko">韩语</option>
                   </select>
                   <p className="text-xs text-mutedForeground mt-2">
                     选择"自动识别"将测试模型的语言识别能力

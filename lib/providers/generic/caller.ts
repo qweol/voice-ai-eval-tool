@@ -106,6 +106,24 @@ function mapLanguageCode(language: string | undefined, templateType?: string): s
       'es': 'es',
       'yue': 'yue',
     },
+    // Cartesia 语言代码
+    cartesia: {
+      'zh': 'zh',
+      'en': 'en',
+      'ja': 'ja',
+      'ko': 'ko',
+      'es': 'es',
+      'yue': 'zh', // Cartesia 不支持粤语，映射为中文
+    },
+    // Minimax 语言代码
+    minimax: {
+      'zh': 'zh',
+      'en': 'en',
+      'ja': 'ja',
+      'ko': 'ko',
+      'es': 'es',
+      'yue': 'zh', // Minimax 不支持粤语参数，映射为中文
+    },
   };
 
   const providerMap = languageMap[templateType || 'openai'] || languageMap.openai;
@@ -786,6 +804,7 @@ export async function callGenericTTS(
         if (options.language === 'auto') {
           return undefined;
         }
+        // 直接返回用户选择的语言，不做任何转换
         return options.language;
       }
       // 如果没有传 language 参数，默认让模型自动识别
