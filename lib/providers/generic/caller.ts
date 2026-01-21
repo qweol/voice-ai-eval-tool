@@ -116,13 +116,15 @@ function mapLanguageCode(language: string | undefined, templateType?: string): s
       'yue': 'zh', // Cartesia 不支持粤语，映射为中文
     },
     // Minimax 语言代码
+    // 注意：Minimax 使用 language_boost 参数来指定语言，粤语使用 "Chinese,Yue" 格式
+    // 这里的映射仅用于兼容性，实际使用 language_boost 参数（见 callMinimaxTTS 函数）
     minimax: {
       'zh': 'zh',
       'en': 'en',
       'ja': 'ja',
       'ko': 'ko',
       'es': 'es',
-      'yue': 'zh', // Minimax 不支持粤语参数，映射为中文
+      'yue': 'yue', // 粤语在 callMinimaxTTS 中会转换为 "Chinese,Yue"
     },
   };
 
@@ -927,7 +929,30 @@ export async function callGenericTTS(
           }
         }
         
-        // 3. 处理 group_id（保持字符串，避免精度丢失）
+        // 3. 添加 language_boost 参数（粤语需要特殊处理）
+        console.log('🔍 Minimax HTTP: 检查 language 参数 =', requestBody.language);
+        if (requestBody.language !== undefined && requestBody.language !== 'auto') {
+          const langMap: Record<string, string> = {
+            'zh': 'Chinese',
+            'en': 'English',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'es': 'Spanish',
+            'yue': 'Chinese,Yue', // 粤语使用特殊格式
+          };
+          const languageBoost = langMap[requestBody.language];
+          console.log('🔍 Minimax HTTP: 映射后的 language_boost =', languageBoost);
+          if (languageBoost) {
+            requestBody.language_boost = languageBoost;
+            console.log('✅ Minimax HTTP: 添加 language_boost =', languageBoost);
+          }
+          // 删除原始的 language 字段（Minimax API 不需要）
+          delete requestBody.language;
+        } else {
+          console.log('⚠️ Minimax HTTP: language 参数为空或为 auto，不添加 language_boost');
+        }
+
+        // 4. 处理 group_id（保持字符串，避免精度丢失）
         // 注意：大数字（如 1752252004131938307）转换为 Number 会丢失精度
         // 如果代理 API 需要数字类型，可能需要通过其他方式传递
         if (requestBody.group_id !== undefined && typeof requestBody.group_id === 'string') {
@@ -1252,7 +1277,23 @@ export async function callMinimaxTTS(
         // 生成用户 ID
         const uid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
-        const request = {
+        // 构建 language_boost 参数（粤语需要特殊处理）
+        let languageBoost: string | undefined;
+        if (options?.language === 'yue') {
+          languageBoost = 'Chinese,Yue'; // 粤语使用特殊格式
+        } else if (options?.language && options.language !== 'auto') {
+          // 其他语言可以直接使用语言代码
+          const langMap: Record<string, string> = {
+            'zh': 'Chinese',
+            'en': 'English',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'es': 'Spanish',
+          };
+          languageBoost = langMap[options.language];
+        }
+
+        const request: any = {
           app: {
             appid: config.appId,
             token: config.apiKey,
@@ -1274,9 +1315,15 @@ export async function callMinimaxTTS(
           },
         };
 
+        // 添加 language_boost 参数（如果指定了语言）
+        if (languageBoost) {
+          request.content.language_boost = languageBoost;
+        }
+
         console.log('=== Minimax WebSocket TTS 开始 ===');
         console.log('音色:', request.content.voice_setting.voice_id);
         console.log('语速:', request.content.voice_setting.speed_ratio);
+        console.log('语言增强:', languageBoost || '未指定（自动检测）');
         console.log('文本长度:', text.length);
 
         ws.send(JSON.stringify(request));

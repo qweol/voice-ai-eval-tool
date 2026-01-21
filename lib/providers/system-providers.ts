@@ -173,6 +173,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
         vol: 1, // 音量，默认 1
         pitch: 0, // 音调，默认 0
       },
+      language: '{language}', // 语言参数，用于转换为 language_boost
       // 注意：官方 API 没有 group_id 字段，如果代理 API 需要，可能需要通过其他方式传递
       // 或者代理 API 的格式与官方不同
       ...(groupId && { group_id: groupId.includes('"') ? groupId.replace(/"/g, '') : groupId }),
