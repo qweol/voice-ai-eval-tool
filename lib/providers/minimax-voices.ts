@@ -117,34 +117,36 @@ export function setCachedVoices(voices: VoiceDefinition[]) {
 }
 
 /**
- * 获取 Minimax 音色列表（优先使用缓存，缓存失效时查询 API）
+ * 获取 Minimax 音色列表（直接使用默认配置列表）
+ * 注意：由于 Minimax 音色管理 API 不可用，改为使用手动配置的音色列表
  */
-export async function getMinimaxVoices(apiKey?: string, forceRefresh = false): Promise<VoiceDefinition[]> {
-  // 如果强制刷新或缓存无效，查询 API
-  if (forceRefresh || !getCachedVoices()) {
-    const voices = await fetchMinimaxVoices(apiKey);
-    if (voices.length > 0) {
-      setCachedVoices(voices);
-      return voices;
-    }
-  }
-
-  // 返回缓存的音色列表
-  const cached = getCachedVoices();
-  if (cached) {
-    return cached;
-  }
-
-  // 如果缓存为空且查询失败，返回默认音色列表
-  console.warn('⚠️ 使用默认音色列表（API 查询失败或未配置）');
+export async function getMinimaxVoices(_apiKey?: string, _forceRefresh = false): Promise<VoiceDefinition[]> {
+  // 直接返回默认音色列表（包含公司自定义克隆音色）
+  console.log('ℹ️ 使用手动配置的 Minimax 音色列表');
   return getDefaultMinimaxVoices();
+
+  // 以下代码已禁用（API 端点不可用）
+  // if (forceRefresh || !getCachedVoices()) {
+  //   const voices = await fetchMinimaxVoices(apiKey);
+  //   if (voices.length > 0) {
+  //     setCachedVoices(voices);
+  //     return voices;
+  //   }
+  // }
+  // const cached = getCachedVoices();
+  // if (cached) {
+  //   return cached;
+  // }
+  // return getDefaultMinimaxVoices();
 }
 
 /**
  * 获取默认音色列表（当 API 查询失败时使用）
+ * 包含系统预置音色和公司自定义克隆音色
  */
 export function getDefaultMinimaxVoices(): VoiceDefinition[] {
   return [
+    // 系统预置音色
     {
       id: 'male-qn-qingse',
       name: '青涩（男声）',
@@ -158,6 +160,98 @@ export function getDefaultMinimaxVoices(): VoiceDefinition[] {
       description: '清新甜美，适合儿童内容、绘本朗读',
       gender: 'female',
       language: 'zh'
+    },
+    // 公司自定义克隆音色
+    {
+      id: 'Midoo_9527',
+      name: 'Midoo_9527',
+      description: '自定义克隆音色',
+      gender: 'male',
+      language: 'zh'
+    },
+    {
+      id: 'jingtantest01',
+      name: 'jingtantest01',
+      description: '自定义克隆音色',
+      gender: 'male',
+      language: 'zh'
+    },
+    {
+      id: 'Cuteboy_platform',
+      name: 'Cuteboy_platform',
+      description: '自定义克隆音色',
+      gender: 'male',
+      language: 'zh'
+    },
+    {
+      id: 'English_UpsetGirl',
+      name: 'English_UpsetGirl',
+      description: '自定义克隆音色（英语）',
+      gender: 'female',
+      language: 'en'
+    },
+    {
+      id: 'English_Trustworthy_Man',
+      name: 'English_Trustworthy_Man',
+      description: '自定义克隆音色（英语）',
+      gender: 'male',
+      language: 'en'
+    },
+    {
+      id: 'Jingtan_Yuri02',
+      name: 'Jingtan_Yuri02',
+      description: '自定义克隆音色',
+      gender: 'female',
+      language: 'zh'
+    },
+    {
+      id: 'jingtan-youngmale01',
+      name: 'jingtan-youngmale01',
+      description: '自定义克隆音色',
+      gender: 'male',
+      language: 'zh'
+    },
+    {
+      id: 'uk_woman16',
+      name: 'uk_woman16',
+      description: '自定义克隆音色（英语）',
+      gender: 'female',
+      language: 'en'
+    },
+    {
+      id: 'jingtan_mira04_0801_1',
+      name: 'jingtan_mira04_0801_1',
+      description: '自定义克隆音色',
+      gender: 'female',
+      language: 'zh'
+    },
+    {
+      id: 'jingtan_mira04_0923_2',
+      name: 'jingtan_mira04_0923_2',
+      description: '自定义克隆音色',
+      gender: 'female',
+      language: 'zh'
+    },
+    {
+      id: 'Mateo_0001',
+      name: 'Mateo_0001',
+      description: '自定义克隆音色',
+      gender: 'male',
+      language: 'zh'
+    },
+    {
+      id: 'Eva_0002',
+      name: 'Eva_0002',
+      description: '自定义克隆音色',
+      gender: 'female',
+      language: 'zh'
+    },
+    {
+      id: 'Cantonese_CuteGirl',
+      name: 'Cantonese_CuteGirl',
+      description: '自定义克隆音色（粤语）',
+      gender: 'female',
+      language: 'yue'
     },
   ];
 }
