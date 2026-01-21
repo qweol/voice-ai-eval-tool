@@ -156,7 +156,6 @@ export function getSystemProviders(): GenericProviderConfig[] {
 
   // 方式1：HTTP REST API（代理方式）
   if (process.env.MINIMAX_TTS_API_URL && process.env.MINIMAX_API_KEY) {
-    const minimaxTemplate = templates.minimax;
     const modelId = process.env.MINIMAX_TTS_MODEL || 'speech-02-turbo';
     const groupId = process.env.MINIMAX_GROUP_ID;
 

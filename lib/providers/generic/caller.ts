@@ -930,8 +930,8 @@ export async function callGenericTTS(
         }
         
         // 3. 添加 language_boost 参数（粤语需要特殊处理）
-        console.log('🔍 Minimax HTTP: 检查 language 参数 =', requestBody.language);
-        if (requestBody.language !== undefined && requestBody.language !== 'auto') {
+        console.log('🔍 Minimax HTTP: 检查 language 参数 =', requestBody.language, '类型:', typeof requestBody.language);
+        if (requestBody.language && requestBody.language !== 'auto' && requestBody.language !== 'undefined') {
           const langMap: Record<string, string> = {
             'zh': 'Chinese',
             'en': 'English',
