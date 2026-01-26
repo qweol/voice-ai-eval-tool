@@ -39,6 +39,14 @@ const openaiStandardVoices: VoiceDefinition[] = [
 const openaiModels: ModelDefinition[] = [
   // ASR模型
   {
+    id: 'gpt-4o-mini-transcribe-2025-12-15',
+    name: 'GPT-4o Mini Transcribe (2025-12-15)',
+    description: 'GPT-4o Mini Transcribe 官方快照版本',
+    type: 'asr',
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it'],
+    maxFileSize: 25 * 1024 * 1024, // 25MB
+  },
+  {
     id: 'whisper-1',
     name: 'Whisper V1',
     description: '通用语音识别模型，支持多语言',
@@ -109,7 +117,7 @@ export const openaiTemplate: APITemplate = {
   responseAudioFormat: 'stream',
   errorPath: 'error.message',
   variables: [
-    { description: '模型名称（如：whisper-1, tts-1）', required: true, default: 'whisper-1' },
+    { description: '模型名称（如：gpt-4o-mini-transcribe-2025-12-15, whisper-1, tts-1）', required: true, default: 'gpt-4o-mini-transcribe-2025-12-15' },
     { description: '语言代码（如：zh, en）', required: false, default: 'zh' },
   ],
 
@@ -121,7 +129,7 @@ export const openaiTemplate: APITemplate = {
 
   // 新增：默认模型
   defaultModel: {
-    asr: 'whisper-1',
+    asr: 'gpt-4o-mini-transcribe-2025-12-15',
     tts: 'gpt-4o-mini-tts',
   },
 };
