@@ -205,12 +205,17 @@ function replaceVariables(template: string, variables: RequestVariables): string
 
   // 移除包含未替换变量的简单键值对行（只匹配 "key": "{value}" 格式）
   // 这个正则只匹配简单的字符串值，不会匹配嵌套对象
-  result = result.replace(/,?\s*"[^"]+"\s*:\s*"\{[^}]+\}"\s*,?\n?/g, '');
+  // 修复：确保正确处理逗号和换行符，避免留下格式错误的 JSON
+  result = result.replace(/,?\s*"[^"]+"\s*:\s*"\{[^}]+\}"\s*,?\s*/g, '');
 
   // 清理可能产生的多余逗号（JSON 对象中的尾随逗号）
   result = result.replace(/,(\s*[}\]])/g, '$1');
   // 清理连续的逗号
   result = result.replace(/,\s*,/g, ',');
+  // 清理对象开始后的逗号
+  result = result.replace(/(\{\s*),/g, '$1');
+  // 清理闭合括号前的逗号和换行符
+  result = result.replace(/,\s*\n\s*([}\]])/g, '\n$1');
 
   return result;
 }
@@ -273,8 +278,8 @@ function buildAuthHeaders(config: GenericProviderConfig): Record<string, string>
       break;
   }
 
-  // Cartesia 特殊处理：添加 Cartesia-Version header
-  if (config.templateType === 'cartesia') {
+  // Cartesia 特殊处理：添加 Cartesia-Version header（允许外部覆盖）
+  if (config.templateType === 'cartesia' && !headers['Cartesia-Version']) {
     headers['Cartesia-Version'] = '2024-06-30';
   }
 
@@ -350,6 +355,20 @@ export async function callGenericASR(
       apiUrl = 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation';
     }
 
+    // Cartesia：将 TTS 端点自动改为 ASR 端点
+    if (config.templateType === 'cartesia') {
+      if (apiUrl.includes('/audio/transcriptions') || apiUrl.includes('/stt')) {
+        // 已是 ASR 端点，保持
+      } else if (apiUrl.includes('/tts/bytes')) {
+        apiUrl = apiUrl.replace('/tts/bytes', '/stt');
+      } else if (apiUrl.includes('/tts')) {
+        apiUrl = apiUrl.replace('/tts', '/stt');
+      } else {
+        // 如果是基础域名或其他路径，默认追加 /stt
+        apiUrl = apiUrl.replace(/\/?$/, '/stt');
+      }
+    }
+
     // 3. OpenAI风格使用multipart/form-data，其他使用JSON
     let response: Response;
 
@@ -408,6 +427,46 @@ export async function callGenericASR(
       }
 
       console.log('=== OpenAI ASR API 调用信息 ===');
+      console.log('API URL:', apiUrl);
+      console.log('模型:', modelId);
+      console.log('格式:', options?.format);
+      console.log('音频大小:', audioBuffer.length, 'bytes');
+      console.log('语言:', mappedLanguage || '自动检测');
+
+      response = await fetch(apiUrl, {
+        method: config.method,
+        headers,
+        body: formData,
+      });
+    } else if (config.templateType === 'cartesia') {
+      // Cartesia ASR 使用 multipart/form-data
+      const formData = new FormData();
+
+      const audioBlob = new Blob([new Uint8Array(audioBuffer)], {
+        type: `audio/${options?.format || 'wav'}`
+      });
+
+      formData.append('file', audioBlob, `audio.${options?.format || 'wav'}`);
+      formData.append('model', modelId);
+
+      if (mappedLanguage) {
+        formData.append('language', mappedLanguage);
+      }
+
+      const headers = buildAuthHeaders(config);
+      delete headers['Content-Type'];
+
+      // ASR 使用最新版本（如用户未显式指定）
+      if (!config.requestHeaders?.['Cartesia-Version']) {
+        headers['Cartesia-Version'] = '2025-04-16';
+      }
+
+      // STT 文档要求 Authorization 头，若缺失则补充
+      if (config.apiKey && !headers['Authorization']) {
+        headers['Authorization'] = `Bearer ${config.apiKey}`;
+      }
+
+      console.log('=== Cartesia ASR API 调用信息 ===');
       console.log('API URL:', apiUrl);
       console.log('模型:', modelId);
       console.log('格式:', options?.format);

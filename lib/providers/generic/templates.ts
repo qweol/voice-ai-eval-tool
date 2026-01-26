@@ -327,9 +327,22 @@ const cartesiaVoices: VoiceDefinition[] = [
 
 /**
  * Cartesia 模型定义
- * 注意：Cartesia 仅支持 TTS，不支持 ASR
+ * 支持 TTS（Sonic）与 ASR（Ink）
  */
 const cartesiaModels: ModelDefinition[] = [
+  // ASR模型
+  {
+    id: 'ink-whisper',
+    name: 'Ink Whisper',
+    description: 'Cartesia Ink 系列最新稳定版（推荐使用基础名）',
+    type: 'asr',
+  },
+  {
+    id: 'ink-whisper-2025-06-04',
+    name: 'Ink Whisper 2025-06-04',
+    description: 'Ink Whisper 稳定快照版本',
+    type: 'asr',
+  },
   {
     id: 'sonic-3',
     name: 'Sonic 3',
@@ -517,23 +530,22 @@ export const azureTemplate: APITemplate = {
 
 /**
  * Cartesia 风格模板
- * 适用于：Cartesia TTS API
+ * 适用于：Cartesia TTS / ASR API
  * 注意：
- * - Cartesia 仅支持 TTS，不支持 ASR
  * - 使用 X-API-Key 认证
  * - 需要 Cartesia-Version header
- * - 响应直接返回音频流
+ * - TTS 响应直接返回音频流
  */
 export const cartesiaTemplate: APITemplate = {
   id: 'cartesia',
   name: 'Cartesia风格',
-  description: '适用于 Cartesia TTS API，支持高质量语音合成',
+  description: '适用于 Cartesia TTS / ASR API，支持高质量语音合成与语音识别',
   defaultApiUrl: 'https://api.cartesia.ai/tts/bytes',
   defaultMethod: 'POST',
   authType: 'apikey',
   isBuiltin: true,
   requestBodyTemplate: {
-    // Cartesia 不支持 ASR
+    // Cartesia ASR 使用 multipart/form-data（在 caller.ts 中处理）
     asr: undefined,
     // TTS 请求体模板
     // 注意：这里使用占位符，实际请求时需要在 caller.ts 中特殊处理 voice 对象
@@ -555,12 +567,12 @@ export const cartesiaTemplate: APITemplate = {
       language: '{language}',
     }, null, 2),
   },
-  responseTextPath: undefined, // Cartesia 不支持 ASR
+  responseTextPath: 'text', // Cartesia ASR 返回 text 字段
   responseAudioPath: '', // 直接返回音频流
   responseAudioFormat: 'stream',
   errorPath: 'error.message',
   variables: [
-    { description: '模型名称（如：sonic-3, sonic-english）', required: true, default: 'sonic-3' },
+    { description: '模型名称（如：sonic-3, sonic-english, ink-whisper）', required: true, default: 'sonic-3' },
     { description: '音色ID', required: true, default: '694f9389-aac1-45b6-b726-9d9369183238' },
     { description: '语言代码（如：en, zh）', required: false, default: 'en' },
   ],
@@ -573,7 +585,7 @@ export const cartesiaTemplate: APITemplate = {
 
   // 默认模型
   defaultModel: {
-    asr: undefined, // 不支持 ASR
+    asr: 'ink-whisper',
     tts: 'sonic-3',
   },
 };

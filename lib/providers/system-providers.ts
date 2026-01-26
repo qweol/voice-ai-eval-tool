@@ -51,7 +51,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
       id: 'system-cartesia',
       name: 'Cartesia（系统预置）',
       type: 'generic',
-      serviceType: 'tts', // Cartesia 仅支持 TTS
+      serviceType: 'both',
       apiUrl: cartesiaTemplate.defaultApiUrl,
       method: cartesiaTemplate.defaultMethod,
       authType: cartesiaTemplate.authType,
@@ -63,7 +63,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
       errorPath: cartesiaTemplate.errorPath,
       templateType: 'cartesia',
       selectedModels: {
-        asr: undefined, // Cartesia 不支持 ASR
+        asr: cartesiaTemplate.defaultModel?.asr,
         tts: cartesiaTemplate.defaultModel?.tts,
       },
       selectedVoice: '694f9389-aac1-45b6-b726-9d9369183238', // 默认使用 British Lady
