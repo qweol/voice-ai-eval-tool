@@ -77,6 +77,8 @@ export default function ASRPage() {
   const [batchLoading, setBatchLoading] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 });
   const [expandedSimilarity, setExpandedSimilarity] = useState<Set<number>>(new Set());
+  // 改为按音频索引分组的选择状态: Map<audioIndex, Set<modelKey>>
+  const [selectedModels, setSelectedModels] = useState<Map<number, Set<string>>>(new Map());
 
   // 共用状态
   const [enabledProviders, setEnabledProviders] = useState<GenericProviderConfig[]>([]);
@@ -450,6 +452,98 @@ export default function ASRPage() {
       }
       return newSet;
     });
+  };
+
+  // 切换模型选择 - 按音频索引分组
+  const toggleModelSelection = (audioIndex: number, providerId: string, modelId: string) => {
+    const key = `${providerId}:${modelId}`;
+    setSelectedModels(prev => {
+      const newMap = new Map(prev);
+      const audioSet = newMap.get(audioIndex) || new Set<string>();
+      const newAudioSet = new Set(audioSet);
+
+      if (newAudioSet.has(key)) {
+        newAudioSet.delete(key);
+      } else {
+        newAudioSet.add(key);
+      }
+
+      newMap.set(audioIndex, newAudioSet);
+      return newMap;
+    });
+  };
+
+  // 全选某个音频的所有模型
+  const selectAllModelsForAudio = (audioIndex: number) => {
+    const result = batchResults[audioIndex];
+    if (!result) return;
+
+    const allKeys = new Set<string>();
+    result.results.forEach(r => {
+      if (r.status === 'success') {
+        allKeys.add(`${r.providerId}:${r.modelId}`);
+      }
+    });
+
+    setSelectedModels(prev => {
+      const newMap = new Map(prev);
+      newMap.set(audioIndex, allKeys);
+      return newMap;
+    });
+  };
+
+  // 取消选择某个音频的所有模型
+  const deselectAllModelsForAudio = (audioIndex: number) => {
+    setSelectedModels(prev => {
+      const newMap = new Map(prev);
+      newMap.set(audioIndex, new Set());
+      return newMap;
+    });
+  };
+
+  // 导出某个音频选中的模型
+  const exportSelectedModelsForAudio = (audioIndex: number) => {
+    const audioSelected = selectedModels.get(audioIndex);
+    if (!audioSelected || audioSelected.size === 0) {
+      alert('请先选择要导出的模型');
+      return;
+    }
+
+    const result = batchResults[audioIndex];
+    const selectedList = Array.from(audioSelected).map(key => {
+      const [providerId, modelId] = key.split(':');
+      const found = result.results.find(r =>
+        r.providerId === providerId && r.modelId === modelId
+      );
+      if (found) {
+        return {
+          providerId,
+          providerName: found.providerName,
+          modelId,
+          modelName: found.modelName,
+        };
+      }
+      return { providerId, modelId };
+    });
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      audioFile: result.audioFile,
+      selectedModels: selectedList,
+      count: selectedList.length,
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+      type: 'application/json;charset=utf-8'
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `selected_models_${result.audioFile}_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   // 批量识别函数
@@ -998,36 +1092,62 @@ export default function ASRPage() {
         {/* 批量结果展示 - 按音频分组 */}
         {batchResults.length > 0 && isBatchMode && (
           <div className="space-y-3">
-            <h2 className="text-2xl font-heading font-bold">
+            <h2 className="text-2xl font-heading font-bold mb-4">
               批量识别结果 {batchLoading && `(${batchProgress.current}/${batchProgress.total})`}
             </h2>
 
-            {batchResults.map((result, index) => (
+            {batchResults.map((result, index) => {
+              const audioSelectedCount = selectedModels.get(index)?.size || 0;
+
+              return (
               <Card key={index} hover={false}>
                 <CardHeader className="py-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold text-foreground">
-                        📁 {result.audioFile}
-                      </h3>
-                      <span className="text-xs text-mutedForeground">
-                        {(result.audioSize / 1024 / 1024).toFixed(2)} MB
-                      </span>
-                    </div>
-                    {result.similarity && result.results.filter(r => r.status === 'success').length > 1 && (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-mutedForeground">整体一致性:</span>
-                        <span className="text-lg font-bold text-accent">
-                          {result.similarity.overall.toFixed(1)}%
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-lg font-bold text-foreground">
+                          📁 {result.audioFile}
+                        </h3>
+                        <span className="text-xs text-mutedForeground">
+                          {(result.audioSize / 1024 / 1024).toFixed(2)} MB
                         </span>
-                        <button
-                          onClick={() => toggleSimilarityExpanded(index)}
-                          className="text-sm text-accent hover:text-accent/80 font-bold transition-colors ml-2"
-                        >
-                          {expandedSimilarity.has(index) ? '▲' : '▼'}
-                        </button>
                       </div>
-                    )}
+                      {result.similarity && result.results.filter(r => r.status === 'success').length > 1 && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-mutedForeground">整体一致性:</span>
+                          <span className="text-lg font-bold text-accent">
+                            {result.similarity.overall.toFixed(1)}%
+                          </span>
+                          <button
+                            onClick={() => toggleSimilarityExpanded(index)}
+                            className="text-sm text-accent hover:text-accent/80 font-bold transition-colors ml-2"
+                          >
+                            {expandedSimilarity.has(index) ? '▲' : '▼'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => selectAllModelsForAudio(index)}
+                        className="px-3 py-1 text-xs bg-accent text-accentForeground rounded-lg hover:bg-accent/90 font-bold transition-colors"
+                      >
+                        全选
+                      </button>
+                      <button
+                        onClick={() => deselectAllModelsForAudio(index)}
+                        className="px-3 py-1 text-xs bg-gray-600 text-white rounded-lg hover:bg-gray-700 font-bold transition-colors"
+                      >
+                        取消全选
+                      </button>
+                      <button
+                        onClick={() => exportSelectedModelsForAudio(index)}
+                        disabled={audioSelectedCount === 0}
+                        className="px-3 py-1 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        导出选中 ({audioSelectedCount})
+                      </button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="py-3">
@@ -1051,6 +1171,7 @@ export default function ASRPage() {
                         <table className="w-full text-sm border-collapse">
                           <thead>
                             <tr className="bg-muted">
+                              <th className="border border-border px-3 py-2 text-center font-bold w-12">选择</th>
                               <th className="border border-border px-3 py-2 text-left font-bold w-32">供应商</th>
                               <th className="border border-border px-3 py-2 text-left font-bold">识别文本</th>
                               <th className="border border-border px-3 py-2 text-center font-bold w-20">耗时</th>
@@ -1069,6 +1190,10 @@ export default function ASRPage() {
                               );
                               const avgSimilarity = result.similarity?.averages[successIndex];
 
+                              const modelKey = `${providerResult.providerId}:${providerResult.modelId}`;
+                              const audioSelected = selectedModels.get(index) || new Set();
+                              const isSelected = audioSelected.has(modelKey);
+
                               return (
                                 <tr
                                   key={idx}
@@ -1076,6 +1201,17 @@ export default function ASRPage() {
                                     providerResult.status === 'error' ? 'bg-red-50' : ''
                                   }`}
                                 >
+                                  <td className="border border-border px-3 py-2 text-center">
+                                    {providerResult.status === 'success' && (
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => toggleModelSelection(index, providerResult.providerId, providerResult.modelId)}
+                                        className="w-4 h-4 rounded border-2 border-foreground accent-accent cursor-pointer"
+                                        title="选择此模型"
+                                      />
+                                    )}
+                                  </td>
                                   <td className="border border-border px-3 py-2">
                                     <div className="flex items-center gap-2">
                                       <span className="font-bold text-foreground">
@@ -1204,7 +1340,8 @@ export default function ASRPage() {
                   )}
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

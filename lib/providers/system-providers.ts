@@ -242,25 +242,25 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
-  // Azure Speech 预置配置
+  // Azure Speech 预置配置（ASR）
   // 需要两个参数：AZURE_SPEECH_KEY, AZURE_SPEECH_REGION
   if (process.env.AZURE_SPEECH_KEY && process.env.AZURE_SPEECH_REGION) {
     const azureTemplate = templates.azure;
     const region = process.env.AZURE_SPEECH_REGION;
 
-    // 替换 URL 中的 {region} 占位符
-    const apiUrl = azureTemplate.defaultApiUrl.replace('{region}', region);
+    // ASR 配置
+    const asrApiUrl = azureTemplate.defaultApiUrl.replace('{region}', region);
 
     providers.push({
-      id: 'system-azure',
-      name: 'Azure Speech（系统预置）',
+      id: 'system-azure-asr',
+      name: 'Azure Speech ASR（系统预置）',
       type: 'generic',
-      serviceType: 'asr', // Azure 目前仅支持 ASR
-      apiUrl: apiUrl,
+      serviceType: 'asr',
+      apiUrl: asrApiUrl,
       method: azureTemplate.defaultMethod,
-      authType: azureTemplate.authType, // 'custom'
+      authType: azureTemplate.authType,
       apiKey: process.env.AZURE_SPEECH_KEY,
-      requestBody: azureTemplate.requestBodyTemplate.asr, // 使用 ASR 模板
+      requestBody: azureTemplate.requestBodyTemplate.asr,
       responseTextPath: azureTemplate.responseTextPath,
       responseAudioPath: azureTemplate.responseAudioPath,
       responseAudioFormat: azureTemplate.responseAudioFormat,
@@ -268,16 +268,47 @@ export function getSystemProviders(): GenericProviderConfig[] {
       templateType: 'azure',
       selectedModels: {
         asr: azureTemplate.defaultModel?.asr,
-        tts: undefined, // Azure 暂不支持 TTS
+        tts: undefined,
       },
-      // 存储自定义的认证头，供 caller.ts 使用
       requestHeaders: {
         'Ocp-Apim-Subscription-Key': process.env.AZURE_SPEECH_KEY,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
       enabled: true,
-      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+
+    // TTS 配置
+    const ttsApiUrl = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
+    providers.push({
+      id: 'system-azure-tts',
+      name: 'Azure Speech TTS（系统预置）',
+      type: 'generic',
+      serviceType: 'tts',
+      apiUrl: ttsApiUrl,
+      method: azureTemplate.defaultMethod,
+      authType: azureTemplate.authType,
+      apiKey: process.env.AZURE_SPEECH_KEY,
+      requestBody: azureTemplate.requestBodyTemplate.tts,
+      responseTextPath: undefined,
+      responseAudioPath: azureTemplate.responseAudioPath,
+      responseAudioFormat: azureTemplate.responseAudioFormat,
+      errorPath: azureTemplate.errorPath,
+      templateType: 'azure',
+      selectedModels: {
+        asr: undefined,
+        tts: azureTemplate.defaultModel?.tts,
+      },
+      selectedVoice: 'zh-CN-XiaoxiaoNeural', // 默认使用晓晓音色
+      requestHeaders: {
+        'Ocp-Apim-Subscription-Key': process.env.AZURE_SPEECH_KEY,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm',
+      },
+      enabled: true,
       isSystem: true,
       readonly: true,
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });

@@ -67,8 +67,8 @@ function mapLanguageCode(language: string | undefined, templateType?: string): s
       'en': 'en-US',
       'ja': 'ja-JP',
       'ko': 'ko-KR',
-      'es': 'es-MX', // 豆包使用墨西哥西班牙语
-      'yue': 'zh-HK', // 粤语
+      'es': 'es-ES', // 豆包使用西班牙语（欧洲）
+      'yue': 'yue-CN', // 粤语
     },
     // Azure 使用的语言代码
     azure: {
@@ -206,7 +206,8 @@ function replaceVariables(template: string, variables: RequestVariables): string
   // 移除包含未替换变量的简单键值对行（只匹配 "key": "{value}" 格式）
   // 这个正则只匹配简单的字符串值，不会匹配嵌套对象
   // 修复：确保正确处理逗号和换行符，避免留下格式错误的 JSON
-  result = result.replace(/,?\s*"[^"]+"\s*:\s*"\{[^}]+\}"\s*,?\s*/g, '');
+  // 匹配整行，包括前后的逗号和换行符
+  result = result.replace(/,?\s*"[^"]+"\s*:\s*"\{[^}]+\}"\s*,?/g, '');
 
   // 清理可能产生的多余逗号（JSON 对象中的尾随逗号）
   result = result.replace(/,(\s*[}\]])/g, '$1');
@@ -216,6 +217,8 @@ function replaceVariables(template: string, variables: RequestVariables): string
   result = result.replace(/(\{\s*),/g, '$1');
   // 清理闭合括号前的逗号和换行符
   result = result.replace(/,\s*\n\s*([}\]])/g, '\n$1');
+  // 清理 } 后面直接跟 " 的情况（缺少逗号）
+  result = result.replace(/(\})\s*\n\s*"/g, '$1,\n"');
 
   return result;
 }
@@ -319,6 +322,11 @@ export async function callGenericASR(
 
     // 映射语言代码到供应商特定格式
     const mappedLanguage = mapLanguageCode(options?.language, config.templateType);
+    console.log('🔍 语言参数映射调试:', {
+      原始语言: options?.language,
+      模板类型: config.templateType,
+      映射后语言: mappedLanguage,
+    });
 
     const variables: RequestVariables = {
       audio: audioBase64,
@@ -634,7 +642,7 @@ export async function callGenericASR(
       // 特殊处理：qwen3-asr-flash 需要使用 messages 格式（优先判断）
       if (config.templateType === 'qwen' && modelId === 'qwen3-asr-flash') {
         console.log('🔄 使用 qwen3-asr-flash 的 messages 格式');
-        // 根据官方文档，请求体结构应该是 { model, input: { messages } }
+        // 根据官方文档，请求体结构应该是 { model, input: { messages }, parameters: { asr_options } }
         requestBody = {
           model: modelId,
           input: {
@@ -651,7 +659,17 @@ export async function callGenericASR(
           }
         };
 
-        // 所有 ASR 模型都使用自动语言检测，不传递 language 参数
+        // 如果指定了语言，添加到 parameters.asr_options 中
+        if (mappedLanguage) {
+          requestBody.parameters = {
+            asr_options: {
+              language: mappedLanguage
+            }
+          };
+          console.log('✅ qwen3-asr-flash: 添加语言参数 =', mappedLanguage);
+        } else {
+          console.log('⚠️ qwen3-asr-flash: 未指定语言，使用自动检测');
+        }
       } else {
         // 其他模型：使用模板构建请求体
         let bodyTemplate: string | undefined;
@@ -681,9 +699,12 @@ export async function callGenericASR(
           console.warn('⚠️ 警告: 没有找到请求体模板，使用默认格式');
           requestBody = {
             audio: audioBase64,
-            // 所有 ASR 模型都使用自动语言检测，不传递 language 参数
             format: variables.format,
           };
+          // 如果指定了语言，添加 language 参数
+          if (mappedLanguage) {
+            requestBody.language = mappedLanguage;
+          }
         }
       }
 
@@ -833,6 +854,12 @@ export async function callGenericTTS(
       console.log('🔄 检测到 Minimax 供应商（HTTP），使用 HTTP 调用器');
     }
 
+    // 特殊处理：Azure TTS 使用 SSML 格式
+    if (config.templateType === 'azure') {
+      console.log('🔄 检测到 Azure TTS，使用 SSML 格式');
+      return await callAzureTTS(config, text, options);
+    }
+
     // 1. 准备变量
     const voiceId = getVoiceId(config, options?.voice);
     
@@ -931,7 +958,7 @@ export async function callGenericTTS(
             // Cartesia Sonic3 的 speed 范围是 0.6 到 1.5
             speedValue = Math.max(0.6, Math.min(1.5, speedValue));
             requestBody.generation_config.speed = speedValue;
-            console.log('✅ Cartesia: generation_config.speed 参数已转换为数字并限制范围 =', speedValue);
+            console.log('✅ Cartesia: generation_config.speed =', speedValue);
           }
         }
         // 向后兼容：如果使用旧的 speed 字段，转换为 generation_config
@@ -1477,4 +1504,143 @@ export async function callMinimaxTTS(
       }
     });
   });
+}
+
+/**
+ * 调用 Azure TTS API（使用 SSML 格式）
+ */
+export async function callAzureTTS(
+  config: GenericProviderConfig,
+  text: string,
+  options?: TTSOptions
+): Promise<TTSResult> {
+  const startTime = Date.now();
+  const modelId = getModelId(config, 'tts');
+  const characterCount = text.length;
+  let ttfb: number | null = null;
+
+  try {
+    // 1. 准备参数
+    const voiceId = getVoiceId(config, options?.voice);
+
+    // 语言映射（Azure 使用 BCP-47 格式）
+    const languageMap: Record<string, string> = {
+      'zh': 'zh-CN',
+      'en': 'en-US',
+      'ja': 'ja-JP',
+      'ko': 'ko-KR',
+      'es': 'es-ES',
+      'fr': 'fr-FR',
+      'de': 'de-DE',
+      'ru': 'ru-RU',
+      'yue': 'zh-HK',
+    };
+
+    const language = options?.language || 'zh';
+    const xmlLang = languageMap[language] || 'zh-CN';
+
+    // 2. 构建 SSML 请求体
+    const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${xmlLang}">
+    <voice name="${voiceId}">
+        ${text}
+    </voice>
+</speak>`;
+
+    console.log('=== Azure TTS API 调用信息 ===');
+    console.log('音色:', voiceId);
+    console.log('语言:', xmlLang);
+    console.log('文本长度:', text.length);
+    console.log('SSML:', ssml);
+
+    // 3. 构建 API URL（将 ASR 端点替换为 TTS 端点）
+    // ASR: https://{region}.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe
+    // TTS: https://{region}.tts.speech.microsoft.com/cognitiveservices/v1
+    let apiUrl = config.apiUrl;
+
+    // 提取 region
+    const regionMatch = apiUrl.match(/https:\/\/([^.]+)\./);
+    const region = regionMatch ? regionMatch[1] : 'eastus';
+
+    // 构建 TTS 端点
+    apiUrl = `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
+    console.log('TTS API URL:', apiUrl);
+    console.log('Region:', region);
+
+    // 4. 构建请求头
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/ssml+xml',
+      'X-Microsoft-OutputFormat': 'riff-24khz-16bit-mono-pcm', // WAV 格式
+      'Ocp-Apim-Subscription-Key': config.apiKey || '',
+    };
+
+    console.log('请求头:', JSON.stringify(headers, null, 2));
+
+    // 5. 发送请求
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body: ssml,
+    });
+
+    console.log('响应状态:', response.status, response.statusText);
+    console.log('响应 Content-Type:', response.headers.get('content-type'));
+
+    // 6. 处理响应
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Azure TTS API 错误:', errorText);
+      throw new Error(`Azure TTS API 调用失败: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    // 读取音频流
+    let audioBuffer: Buffer;
+    let ttfbRecorded = false;
+
+    if (response.body && typeof response.body.getReader === 'function') {
+      const reader = response.body.getReader();
+      const chunks: Buffer[] = [];
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) {
+          if (!ttfbRecorded) {
+            ttfb = Date.now() - startTime;
+            ttfbRecorded = true;
+            console.log('TTFB (首字节耗时):', ttfb, 'ms');
+          }
+          chunks.push(Buffer.from(value));
+        }
+      }
+      audioBuffer = Buffer.concat(chunks);
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffer = Buffer.from(arrayBuffer);
+    }
+
+    if (!ttfbRecorded) {
+      ttfb = Date.now() - startTime;
+    }
+
+    const totalTime = Date.now() - startTime;
+    const duration = totalTime / 1000;
+
+    console.log('🎉 Azure TTS 调用成功');
+    console.log('音频大小:', audioBuffer.length, 'bytes');
+    console.log('总耗时:', totalTime, 'ms');
+    console.log('TTFB:', ttfb, 'ms');
+
+    return {
+      audioBuffer,
+      duration,
+      ttfb,
+      totalTime,
+      format: 'wav',
+      modelId,
+      characterCount,
+    };
+  } catch (error: any) {
+    console.error('❌ Azure TTS 调用失败:', error.message);
+    throw new Error(`Azure TTS API调用失败: ${error.message}`);
+  }
 }

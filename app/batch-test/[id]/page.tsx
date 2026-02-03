@@ -480,6 +480,7 @@ function TestCasesTab({ batch, onUpdate }: { batch: BatchTest; onUpdate: () => v
 function TestResultsTab({ batch }: { batch: BatchTest }) {
   const [showBadCaseModal, setShowBadCaseModal] = useState(false);
   const [selectedResult, setSelectedResult] = useState<{ testCase: TestCase; result: TestResult } | null>(null);
+  const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
 
   if (batch.results.length === 0) {
     return (
@@ -508,6 +509,62 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
   const handleMarkAsBadCase = (testCase: TestCase, result: TestResult) => {
     setSelectedResult({ testCase, result });
     setShowBadCaseModal(true);
+  };
+
+  const handleToggleProvider = (providerId: string) => {
+    const newSelected = new Set(selectedProviders);
+    if (newSelected.has(providerId)) {
+      newSelected.delete(providerId);
+    } else {
+      newSelected.add(providerId);
+    }
+    setSelectedProviders(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    const allProviders = new Set(batch.providers);
+    setSelectedProviders(allProviders);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedProviders(new Set());
+  };
+
+  const exportSelectedProviders = () => {
+    if (selectedProviders.size === 0) {
+      alert('请先选择要导出的模型');
+      return;
+    }
+
+    const selectedList = Array.from(selectedProviders).map(providerId => {
+      const providerName = getProviderName(providerId);
+      return { id: providerId, name: providerName };
+    });
+
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      batchId: batch.id,
+      batchName: batch.name,
+      selectedProviders: selectedList,
+      count: selectedList.length,
+    };
+
+    const pretty = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([pretty], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const d = new Date();
+    const ts = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const filename = `selected_providers_${batch.id}_${ts}.json`;
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const exportJsonReport = () => {
@@ -590,7 +647,28 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex gap-2">
+          <button
+            onClick={handleSelectAll}
+            className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+          >
+            全选
+          </button>
+          <button
+            onClick={handleDeselectAll}
+            className="px-3 py-1.5 bg-gray-600 text-white text-sm rounded-lg hover:bg-gray-700"
+          >
+            取消全选
+          </button>
+          <button
+            onClick={exportSelectedProviders}
+            disabled={selectedProviders.size === 0}
+            className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            导出选中模型 ({selectedProviders.size})
+          </button>
+        </div>
         <button
           onClick={exportJsonReport}
           className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900"
@@ -606,6 +684,13 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
             <div className="grid gap-4">
               {results.map((result) => (
                 <div key={result.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded">
+                  <input
+                    type="checkbox"
+                    checked={selectedProviders.has(result.provider)}
+                    onChange={() => handleToggleProvider(result.provider)}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    title="选择此模型"
+                  />
                   <div className="flex-1">
                     <div className="font-medium text-gray-700">{getProviderName(result.provider)}</div>
                     {result.status === 'SUCCESS' ? (

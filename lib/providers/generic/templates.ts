@@ -247,8 +247,8 @@ export const qwenTemplate: APITemplate = {
  */
 const cartesiaVoices: VoiceDefinition[] = [
   {
-    id: '694f9389-aac1-45b6-b726-9d9369183238',
-    name: 'British Lady',
+    id: '228fca29-3a0a-435c-8728-5cb483251068',
+    name: 'Katie',
     description: 'Professional British female voice',
     gender: 'female',
     language: 'en'
@@ -282,43 +282,50 @@ const cartesiaVoices: VoiceDefinition[] = [
     language: 'en'
   },
   {
-    id: 'e07c00bc-4134-4eae-9ea4-1a55fb45746b',
-    name: 'Brooklyn',
+    id: '10dcaea6-bc36-4def-a51a-e9357ce7c0f3',
+    name: 'Midoo',
+    description: 'Sonic3 voice',
+    gender: 'neutral',
+    language: 'en'
+  },
+  {
+    id: 'a6065a2e-fdfe-4c58-9ebc-cbbbef17435a',
+    name: 'EVa',
     description: 'Sonic3 voice',
     gender: 'female',
     language: 'en'
   },
   {
-    id: 'f786b574-daa5-4673-aa0c-cbe3e8534c02',
-    name: 'Katie',
+    id: 'a4e16ac3-b17e-43fc-87f8-9de8828a2789',
+    name: 'Stella',
     description: 'Sonic3 voice',
     gender: 'female',
     language: 'en'
   },
   {
-    id: '47c38ca4-5f35-497b-b1a3-415245fb35e1',
-    name: 'Daniel',
-    description: 'Sonic3 modern assistant voice',
+    id: '89f018e3-284e-4fab-a75f-4ccfeb3974a5',
+    name: 'Mateo',
+    description: 'Sonic3 voice',
     gender: 'male',
     language: 'en'
   },
   {
-    id: 'a01c369f-6d2d-4185-bc20-b32c225eab70',
-    name: 'Fiona',
+    id: '990eb80c-6c7f-4935-ba02-a6d151e1a10c',
+    name: 'Ella',
     description: 'Sonic3 voice',
     gender: 'female',
     language: 'en'
   },
   {
-    id: 'e8e5fffb-252c-436d-b842-8879b84445b6',
-    name: 'Casey',
+    id: 'fa7cd6a5-d146-4bd0-97bf-eac0a58e74a2',
+    name: 'Bella',
     description: 'Sonic3 voice',
     gender: 'female',
     language: 'en'
   },
   {
-    id: '9626c31c-bec5-4cca-baa8-f8ba9e84c8bc',
-    name: 'Jacqueline',
+    id: 'e354c8f1-3548-4665-8d85-6658f92a7961',
+    name: 'Olivia',
     description: 'Sonic3 voice',
     gender: 'female',
     language: 'en'
@@ -461,6 +468,29 @@ export const doubaoTemplate: APITemplate = {
 };
 
 /**
+ * Azure TTS 音色定义
+ * 参考：https://learn.microsoft.com/azure/ai-services/speech-service/language-support
+ */
+const azureTtsVoices: VoiceDefinition[] = [
+  // 中文音色
+  { id: 'zh-CN-XiaoxiaoNeural', name: '晓晓（女声）', description: '温柔亲切的女声', gender: 'female', language: 'zh' },
+  { id: 'zh-CN-YunxiNeural', name: '云希（男声）', description: '沉稳专业的男声', gender: 'male', language: 'zh' },
+  { id: 'zh-CN-YunyangNeural', name: '云扬（男声）', description: '新闻播报风格', gender: 'male', language: 'zh' },
+  { id: 'zh-CN-XiaoyiNeural', name: '晓伊（女声）', description: '活泼可爱的女声', gender: 'female', language: 'zh' },
+  // 英文音色
+  { id: 'en-US-AvaMultilingualNeural', name: 'Ava（女声）', description: '多语言支持，自然流畅', gender: 'female', language: 'en' },
+  { id: 'en-US-AndrewMultilingualNeural', name: 'Andrew（男声）', description: '多语言支持，专业稳重', gender: 'male', language: 'en' },
+  { id: 'en-US-EmmaMultilingualNeural', name: 'Emma（女声）', description: '多语言支持，温暖友好', gender: 'female', language: 'en' },
+  { id: 'en-US-BrianMultilingualNeural', name: 'Brian（男声）', description: '多语言支持，清晰有力', gender: 'male', language: 'en' },
+  // 日文音色
+  { id: 'ja-JP-NanamiNeural', name: 'Nanami（女声）', description: '标准日语女声', gender: 'female', language: 'ja' },
+  { id: 'ja-JP-KeitaNeural', name: 'Keita（男声）', description: '标准日语男声', gender: 'male', language: 'ja' },
+  // 韩文音色
+  { id: 'ko-KR-SunHiNeural', name: 'Sun-Hi（女声）', description: '标准韩语女声', gender: 'female', language: 'ko' },
+  { id: 'ko-KR-InJoonNeural', name: 'InJoon（男声）', description: '标准韩语男声', gender: 'male', language: 'ko' },
+];
+
+/**
  * Azure Speech 模型定义
  */
 const azureModels: ModelDefinition[] = [
@@ -473,26 +503,38 @@ const azureModels: ModelDefinition[] = [
     supportedLanguages: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR', 'es-ES', 'fr-FR', 'de-DE', 'ru-RU', 'ar-SA', 'hi-IN', 'pt-BR', 'it-IT'],
     maxFileSize: 200 * 1024 * 1024, // 200MB
   },
+  // TTS模型
+  {
+    id: 'azure-tts-neural',
+    name: 'Azure Neural TTS',
+    description: 'Azure 神经网络语音合成，支持500+音色，140+语言',
+    type: 'tts',
+    voices: azureTtsVoices,
+    supportedFormats: ['wav', 'mp3'],
+    speedRange: [0.5, 2.0],
+  },
 ];
 
 /**
  * Azure 风格模板
- * 适用于：Microsoft Azure Speech Service - Fast Transcription API
+ * 适用于：Microsoft Azure Speech Service (ASR + TTS)
  *
- * API文档: https://learn.microsoft.com/azure/ai-services/speech-service/fast-transcription-create
+ * API文档:
+ * - ASR: https://learn.microsoft.com/azure/ai-services/speech-service/fast-transcription-create
+ * - TTS: https://learn.microsoft.com/azure/ai-services/speech-service/rest-text-to-speech
  *
  * 注意:
- * - 使用 Fast Transcription API (2025-10-15 版本)
+ * - ASR 使用 Fast Transcription API (2024-11-15 版本)
+ * - TTS 使用 REST API v1，通过 SSML 格式请求
  * - 使用 Ocp-Apim-Subscription-Key 认证
- * - 支持多语言自动识别（无需指定语言参数）
- * - 音频通过 Base64 编码上传
- * - 支持多种音频格式: wav, mp3, ogg, flac, opus 等
+ * - ASR 支持多语言自动识别（无需指定语言参数）
+ * - TTS 支持 500+ 音色，140+ 语言
  * - 支持的区域: eastus, southeastasia, westeurope, centralindia
  */
 export const azureTemplate: APITemplate = {
   id: 'azure',
   name: 'Azure风格',
-  description: '适用于 Microsoft Azure 语音识别服务 (Fast Transcription API)，支持140+语言自动识别',
+  description: '适用于 Microsoft Azure 语音服务，支持 ASR（140+语言）和 TTS（500+音色）',
   defaultApiUrl: 'https://{region}.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15',
   defaultMethod: 'POST',
   authType: 'custom', // 使用自定义认证方式 (Ocp-Apim-Subscription-Key)
@@ -504,11 +546,16 @@ export const azureTemplate: APITemplate = {
       },
       locales: ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'],
     }, null, 2),
-    tts: undefined, // Azure 暂不支持 TTS（或需要单独配置）
+    // TTS 使用 SSML 格式（在 caller.ts 中特殊处理）
+    tts: `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{language}">
+    <voice name="{voice}">
+        {text}
+    </voice>
+</speak>`,
   },
   responseTextPath: 'combinedPhrases[0].text',
-  responseAudioPath: undefined,
-  responseAudioFormat: undefined,
+  responseAudioPath: '', // TTS 直接返回音频流
+  responseAudioFormat: 'stream',
   errorPath: 'error.message',
   variables: [
     { description: '模型名称', required: true, default: 'azure-stt-multilingual' },
@@ -524,7 +571,7 @@ export const azureTemplate: APITemplate = {
   // 默认模型
   defaultModel: {
     asr: 'azure-stt-multilingual',
-    tts: undefined, // 暂不支持TTS
+    tts: 'azure-tts-neural',
   },
 };
 
@@ -826,6 +873,24 @@ const minimaxVoices: VoiceDefinition[] = [
  * 注意：仅保留已验证可用的模型
  */
 const minimaxModels: ModelDefinition[] = [
+  {
+    id: 'speech-2.8',
+    name: 'Minimax Speech 2.8',
+    description: '最新版本，性能和质量进一步提升',
+    type: 'tts',
+    voices: minimaxVoices,
+    supportedFormats: ['wav'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'speech-2.6',
+    name: 'Minimax Speech 2.6',
+    description: '稳定版本，平衡性能与质量',
+    type: 'tts',
+    voices: minimaxVoices,
+    supportedFormats: ['wav'],
+    speedRange: [0.5, 2.0],
+  },
   {
     id: 'speech-02-turbo',
     name: 'Minimax Speech 02 Turbo',
