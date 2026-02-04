@@ -7,7 +7,7 @@ export type AuthType = 'bearer' | 'apikey' | 'custom';
 export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'PATCH';
 
 // 内置模板类型（向后兼容）
-export type BuiltinTemplateType = 'openai' | 'qwen' | 'doubao' | 'azure' | 'cartesia' | 'minimax' | 'deepgram' | 'gemini' | 'custom';
+export type BuiltinTemplateType = 'openai' | 'qwen' | 'doubao' | 'azure' | 'cartesia' | 'minimax' | 'deepgram' | 'gemini' | 'elevenlabs' | 'custom';
 
 // 模板ID可以是内置类型或自定义字符串
 export type TemplateType = BuiltinTemplateType | string;

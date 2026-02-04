@@ -302,6 +302,15 @@ function buildAuthHeaders(config: GenericProviderConfig): Record<string, string>
     headers['X-Api-Sequence'] = '-1'; // -1表示单次请求
   }
 
+  // ElevenLabs 特殊处理：使用 xi-api-key header
+  if (config.templateType === 'elevenlabs') {
+    if (config.apiKey) {
+      headers['xi-api-key'] = config.apiKey;
+    }
+    // 移除可能被添加的 Authorization header
+    delete headers['Authorization'];
+  }
+
   return headers;
 }
 
@@ -1106,6 +1115,15 @@ export async function callGenericTTS(
       if (apiUrl.endsWith('/v1') || apiUrl.endsWith('/v1/')) {
         apiUrl = apiUrl.replace(/\/v1\/?$/, '/v1/audio/speech');
       }
+    }
+
+    // ElevenLabs 特殊处理：替换 URL 中的 {voice} 占位符
+    if (config.templateType === 'elevenlabs') {
+      apiUrl = apiUrl.replace('{voice}', voiceId);
+      // 可选：添加查询参数（output_format, optimize_streaming_latency）
+      const outputFormat = 'mp3_44100_128'; // 默认格式
+      const optimizeLatency = 2; // 默认优化级别
+      apiUrl += `?output_format=${outputFormat}&optimize_streaming_latency=${optimizeLatency}`;
     }
 
     // 调试日志

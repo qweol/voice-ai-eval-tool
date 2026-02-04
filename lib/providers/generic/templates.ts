@@ -1001,6 +1001,139 @@ export const minimaxTemplate: APITemplate = {
 };
 
 /**
+ * ElevenLabs TTS 音色定义
+ * 参考：https://elevenlabs.io/docs/api-reference/voices/search
+ */
+const elevenlabsVoices: VoiceDefinition[] = [
+  { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', description: 'A warm, expressive voice with a touch of humor', gender: 'female', language: 'en' },
+  { id: 'pNInz6obpgDQGcFmaJgB', name: 'Adam', description: 'A deep, warm male voice', gender: 'male', language: 'en' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Bella', description: 'A warm and friendly female voice', gender: 'female', language: 'en' },
+  { id: 'ErXwobaYiN019PkySvjV', name: 'Antoni', description: 'A well-rounded male voice', gender: 'male', language: 'en' },
+  { id: 'MF3mGyEYCl7XYWbV9V6O', name: 'Elli', description: 'A young, energetic female voice', gender: 'female', language: 'en' },
+  { id: 'TxGEqnHWrfWFTfGW9XjX', name: 'Josh', description: 'A deep, resonant male voice', gender: 'male', language: 'en' },
+  { id: 'VR6AewLTigWG4xSOukaG', name: 'Arnold', description: 'A crisp, authoritative male voice', gender: 'male', language: 'en' },
+  { id: 'pFZP5JQG7iQjIQuC4Bku', name: 'Lily', description: 'A warm, friendly female voice', gender: 'female', language: 'en' },
+  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel', description: 'A deep, authoritative male voice', gender: 'male', language: 'en' },
+];
+
+/**
+ * ElevenLabs 模型定义
+ * 参考：https://elevenlabs.io/docs/api-reference/text-to-speech
+ */
+const elevenlabsModels: ModelDefinition[] = [
+  {
+    id: 'eleven_turbo_v2_5',
+    name: 'Eleven Turbo v2.5',
+    description: 'Latest turbo model, optimized for speed and responsiveness with low latency',
+    type: 'tts',
+    voices: elevenlabsVoices,
+    supportedFormats: ['mp3', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'eleven_turbo_v2',
+    name: 'Eleven Turbo v2',
+    description: 'Turbo model for real-time conversational applications',
+    type: 'tts',
+    voices: elevenlabsVoices,
+    supportedFormats: ['mp3', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'eleven_flash_v2_5',
+    name: 'Eleven Flash v2.5',
+    description: 'Latest flash model with ultra-fast synthesis and minimal latency',
+    type: 'tts',
+    voices: elevenlabsVoices,
+    supportedFormats: ['mp3', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'eleven_flash_v2',
+    name: 'Eleven Flash v2',
+    description: 'Flash model for time-critical applications and streaming',
+    type: 'tts',
+    voices: elevenlabsVoices,
+    supportedFormats: ['mp3', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'eleven_multilingual_v2',
+    name: 'Eleven Multilingual v2',
+    description: 'Multilingual model supporting multiple languages with consistent quality',
+    type: 'tts',
+    voices: elevenlabsVoices,
+    supportedFormats: ['mp3', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'eleven_monolingual_v1',
+    name: 'Eleven Monolingual v1',
+    description: 'Original English-only model with high quality',
+    type: 'tts',
+    voices: elevenlabsVoices,
+    supportedFormats: ['mp3', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+];
+
+/**
+ * ElevenLabs 风格模板
+ * 适用于：ElevenLabs Text-to-Speech API
+ *
+ * API文档: https://elevenlabs.io/docs/api-reference/text-to-speech
+ *
+ * 注意:
+ * - 使用 xi-api-key header 认证
+ * - 支持流式响应（/stream 端点）
+ * - voice_id 在 URL 路径中
+ * - 支持 voice_settings (stability, similarity_boost, style, speed)
+ * - 支持多种输出格式和优化选项
+ */
+export const elevenlabsTemplate: APITemplate = {
+  id: 'elevenlabs',
+  name: 'ElevenLabs风格',
+  description: '适用于 ElevenLabs TTS API，支持高质量语音合成和流式输出',
+  defaultApiUrl: 'https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream',
+  defaultMethod: 'POST',
+  authType: 'custom', // 使用 xi-api-key header
+  isBuiltin: true,
+  requestBodyTemplate: {
+    asr: undefined, // ElevenLabs 不支持 ASR
+    tts: JSON.stringify({
+      text: '{text}',
+      model_id: '{model}',
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: 0,
+        use_speaker_boost: true,
+      },
+    }, null, 2),
+  },
+  responseTextPath: undefined,
+  responseAudioPath: '', // 直接返回音频流
+  responseAudioFormat: 'stream',
+  errorPath: 'detail.message',
+  variables: [
+    { description: '模型名称（如：eleven_turbo_v2_5, eleven_flash_v2_5, eleven_multilingual_v2）', required: true, default: 'eleven_turbo_v2_5' },
+    { description: '音色ID', required: true, default: '21m00Tcm4TlvDq8ikWAM' },
+  ],
+
+  // 模型列表
+  models: elevenlabsModels,
+
+  // 不允许自定义模型
+  allowCustomModel: false,
+
+  // 默认模型
+  defaultModel: {
+    asr: undefined, // 不支持 ASR
+    tts: 'eleven_turbo_v2_5',
+  },
+};
+
+/**
  * Deepgram 风格模板
  * 适用于：Deepgram Speech-to-Text API (Pre-recorded Audio)
  *
@@ -1090,6 +1223,7 @@ export const templates: Record<TemplateType, APITemplate> = {
   minimax: minimaxTemplate,
   deepgram: deepgramTemplate,
   gemini: geminiTemplate,
+  elevenlabs: elevenlabsTemplate,
   custom: customTemplate,
 };
 

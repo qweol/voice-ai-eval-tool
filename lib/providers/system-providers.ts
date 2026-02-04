@@ -422,6 +422,37 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
+  // ElevenLabs 预置配置
+  if (process.env.ELEVENLABS_API_KEY) {
+    const elevenlabsTemplate = templates.elevenlabs;
+
+    providers.push({
+      id: 'system-elevenlabs',
+      name: 'ElevenLabs（系统预置）',
+      type: 'generic',
+      serviceType: 'tts',
+      apiUrl: elevenlabsTemplate.defaultApiUrl,
+      method: elevenlabsTemplate.defaultMethod,
+      authType: elevenlabsTemplate.authType,
+      apiKey: process.env.ELEVENLABS_API_KEY,
+      requestBody: elevenlabsTemplate.requestBodyTemplate.tts,
+      responseTextPath: elevenlabsTemplate.responseTextPath,
+      responseAudioPath: elevenlabsTemplate.responseAudioPath,
+      responseAudioFormat: elevenlabsTemplate.responseAudioFormat,
+      errorPath: elevenlabsTemplate.errorPath,
+      templateType: 'elevenlabs',
+      selectedModels: {
+        asr: elevenlabsTemplate.defaultModel?.asr,
+        tts: elevenlabsTemplate.defaultModel?.tts,
+      },
+      selectedVoice: '21m00Tcm4TlvDq8ikWAM', // 默认使用 Rachel 音色
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
   return providers;
 }
 
