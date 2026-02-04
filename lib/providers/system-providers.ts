@@ -109,7 +109,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
     } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
   }
 
-  // Doubao/豆包 预置配置
+  // Doubao/豆包 预置配置（ASR）
   // 需要三个参数：DOUBAO_APP_ID, DOUBAO_ACCESS_TOKEN, DOUBAO_RESOURCE_ID
   if (process.env.DOUBAO_APP_ID && process.env.DOUBAO_ACCESS_TOKEN) {
     const doubaoTemplate = templates.doubao;
@@ -118,11 +118,12 @@ export function getSystemProviders(): GenericProviderConfig[] {
     const apiUrl = process.env.DOUBAO_API_URL || doubaoTemplate.defaultApiUrl;
     const resourceId = process.env.DOUBAO_RESOURCE_ID || 'volc.bigasr.auc_turbo';
 
+    // ASR 配置
     providers.push({
-      id: 'system-doubao',
-      name: '豆包（系统预置）',
+      id: 'system-doubao-asr',
+      name: '豆包 ASR（系统预置）',
       type: 'generic',
-      serviceType: 'asr', // 豆包目前仅支持 ASR
+      serviceType: 'asr',
       apiUrl: apiUrl,
       method: doubaoTemplate.defaultMethod,
       authType: doubaoTemplate.authType, // 'custom'
@@ -136,11 +137,46 @@ export function getSystemProviders(): GenericProviderConfig[] {
       templateType: 'doubao',
       selectedModels: {
         asr: 'bigmodel-flash', // 默认使用极速版
-        tts: undefined, // 豆包暂不支持 TTS
+        tts: undefined,
       },
       // 存储自定义的 Resource ID，供 caller.ts 使用
       requestHeaders: {
         'X-Api-Resource-Id': resourceId,
+      },
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+
+    // TTS 配置
+    const ttsApiUrl = 'https://openspeech.bytedance.com/api/v3/tts/unidirectional';
+    const ttsResourceId = process.env.DOUBAO_TTS_RESOURCE_ID || 'seed-tts-2.0';
+
+    providers.push({
+      id: 'system-doubao-tts',
+      name: '豆包 TTS（系统预置）',
+      type: 'generic',
+      serviceType: 'tts',
+      apiUrl: ttsApiUrl,
+      method: doubaoTemplate.defaultMethod,
+      authType: doubaoTemplate.authType, // 'custom'
+      apiKey: process.env.DOUBAO_ACCESS_TOKEN, // Access Token
+      appId: process.env.DOUBAO_APP_ID, // App ID
+      requestBody: doubaoTemplate.requestBodyTemplate.tts, // 使用 TTS 模板
+      responseTextPath: undefined,
+      responseAudioPath: doubaoTemplate.responseAudioPath, // 'data'
+      responseAudioFormat: doubaoTemplate.responseAudioFormat, // 'base64'
+      errorPath: doubaoTemplate.errorPath,
+      templateType: 'doubao',
+      selectedModels: {
+        asr: undefined,
+        tts: 'doubao-tts-2.0',
+      },
+      selectedVoice: 'BV700_V2_streaming', // 默认使用灿灿2.0音色
+      // 存储 TTS Resource ID，供 caller.ts 使用
+      requestHeaders: {
+        'X-Api-Resource-Id': ttsResourceId,
       },
       enabled: true,
       // 系统预置标识

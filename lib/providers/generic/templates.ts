@@ -378,6 +378,19 @@ const cartesiaModels: ModelDefinition[] = [
     speedRange: [0.5, 2.0],
   },
 ];
+
+/**
+ * 豆包 TTS 音色定义
+ * 参考：https://www.volcengine.com/docs/6561/1221431
+ */
+const doubaoTtsVoices: VoiceDefinition[] = [
+  // 大模型音色
+  { id: 'zh_female_vv_uranus_bigtts', name: 'Vivi 2.0', description: '情感变化、指令遵循、ASMR', gender: 'female', language: 'zh' },
+  { id: 'zh_female_xiaohe_uranus_bigtts', name: '小何 2.0', description: '情感变化能力', gender: 'female', language: 'zh' },
+  { id: 'zh_male_m191_uranus_bigtts', name: '云舟 2.0', description: '稳重男声', gender: 'male', language: 'zh' },
+  { id: 'zh_male_taocheng_uranus_bigtts', name: '小天 2.0', description: '清晰自然男声', gender: 'male', language: 'zh' },
+];
+
 /**
  * 豆包模型定义
  */
@@ -400,24 +413,37 @@ const doubaoModels: ModelDefinition[] = [
     supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'yue', 'wuu', 'nan', 'hsn', 'sxn'],
     maxFileSize: 100 * 1024 * 1024, // 100MB
   },
+  // TTS模型 - 豆包语音合成 2.0
+  {
+    id: 'doubao-tts-2.0',
+    name: '豆包语音合成 2.0',
+    description: '豆包TTS 2.0，支持22种情感/风格，多语言支持，长文本合成（最多10万字符）',
+    type: 'tts',
+    voices: doubaoTtsVoices,
+    supportedFormats: ['wav', 'mp3'],
+    speedRange: [0.5, 2.0],
+  },
 ];
 
 /**
  * 豆包风格模板
- * 适用于：字节跳动豆包语音服务 - 录音文件识别2.0
+ * 适用于：字节跳动豆包语音服务 - ASR（录音文件识别2.0）+ TTS（语音合成2.0）
  *
- * API文档: https://www.volcengine.com/docs/6561/1631584
+ * API文档:
+ * - ASR: https://www.volcengine.com/docs/6561/1631584
+ * - TTS: https://www.volcengine.com/docs/6561/1221431
  *
  * 注意:
  * - 使用自定义Header认证 (X-Api-App-Key, X-Api-Access-Key, X-Api-Resource-Id)
- * - 音频通过Base64编码直接上传
+ * - ASR: 音频通过Base64编码直接上传
+ * - TTS: 支持22种情感/风格，多语言支持
  * - 支持多种音频格式: wav, mp3, ogg, pcm等
  * - 支持多语言自动识别
  */
 export const doubaoTemplate: APITemplate = {
   id: 'doubao',
   name: '豆包风格',
-  description: '适用于字节跳动火山引擎豆包语音识别服务(录音文件识别2.0)',
+  description: '适用于字节跳动火山引擎豆包语音服务（ASR + TTS）',
   defaultApiUrl: 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/recognize/flash',
   defaultMethod: 'POST',
   authType: 'custom', // 使用自定义认证方式
@@ -438,15 +464,20 @@ export const doubaoTemplate: APITemplate = {
       },
     }, null, 2),
     tts: JSON.stringify({
-      model: '{model}',
+      appid: '{appId}',
+      reqid: '{reqid}',
       text: '{text}',
-      voice: '{voice}',
-      speed: '{speed}',
-      volume: '{volume}',
+      speaker: '{voice}',
+      audio_config: {
+        format: 'wav',
+        sample_rate: 24000,
+        speech_rate: '{speech_rate}',
+        pitch_rate: 0,
+      },
     }, null, 2),
   },
   responseTextPath: 'result.text',
-  responseAudioPath: 'result.audio',
+  responseAudioPath: 'data', // TTS V3 API 响应中音频数据在 data 字段
   responseAudioFormat: 'base64',
   errorPath: 'header.message',
   variables: [
@@ -463,7 +494,7 @@ export const doubaoTemplate: APITemplate = {
   // 默认模型
   defaultModel: {
     asr: 'bigmodel',
-    tts: undefined, // 暂不支持TTS
+    tts: 'doubao-tts-2.0',
   },
 };
 
