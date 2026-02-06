@@ -756,7 +756,7 @@ export const geminiTemplate: APITemplate = {
   id: 'gemini',
   name: 'Gemini风格',
   description: '适用于 Google Vertex AI Gemini 语音识别服务，支持多语言、长音频转录',
-  defaultApiUrl: 'https://global-aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{model}:generateContent',
+  defaultApiUrl: 'https://aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{model}:generateContent',
   defaultMethod: 'POST',
   authType: 'custom', // 使用 custom 类型，通过 OAuth2 Bearer Token 认证
   isBuiltin: true,
@@ -765,6 +765,7 @@ export const geminiTemplate: APITemplate = {
     asr: JSON.stringify({
       contents: [
         {
+          role: 'user',
           parts: [
             {
               inline_data: {
@@ -1075,6 +1076,15 @@ const elevenlabsModels: ModelDefinition[] = [
     supportedFormats: ['mp3', 'pcm'],
     speedRange: [0.5, 2.0],
   },
+  {
+    id: 'eleven_v3',
+    name: 'Eleven Multilingual v3',
+    description: 'Most emotionally rich and expressive model with dramatic delivery, supports 70+ languages, natural multi-speaker dialogue with contextual understanding',
+    type: 'tts',
+    voices: elevenlabsVoices,
+    supportedFormats: ['mp3', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
 ];
 
 /**
@@ -1103,12 +1113,14 @@ export const elevenlabsTemplate: APITemplate = {
     tts: JSON.stringify({
       text: '{text}',
       model_id: '{model}',
+      language_code: '{language}',
       voice_settings: {
         stability: 0.5,
         similarity_boost: 0.75,
         style: 0,
         use_speaker_boost: true,
       },
+      apply_text_normalization: 'on',
     }, null, 2),
   },
   responseTextPath: undefined,

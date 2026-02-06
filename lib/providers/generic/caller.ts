@@ -8,6 +8,20 @@ import { ASRResult, TTSResult, ASROptions, TTSOptions } from '../../types';
 import { templates } from './templates';
 import { getTemplate } from './template-loader';
 import WebSocket from 'ws';
+import { ProxyAgent } from 'undici';
+
+/**
+ * 获取代理配置
+ */
+function getProxyAgent(): ProxyAgent | undefined {
+  const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
+
+  if (proxyUrl) {
+    return new ProxyAgent(proxyUrl);
+  }
+
+  return undefined;
+}
 
 /**
  * 获取要使用的模型ID
@@ -125,6 +139,22 @@ function mapLanguageCode(language: string | undefined, templateType?: string): s
       'ko': 'ko',
       'es': 'es',
       'yue': 'yue', // 粤语在 callMinimaxTTS 中会转换为 "Chinese,Yue"
+    },
+    // ElevenLabs 语言代码（ISO 639-1 标准）
+    elevenlabs: {
+      'zh': 'zh',
+      'en': 'en',
+      'ja': 'ja',
+      'ko': 'ko',
+      'es': 'es',
+      'fr': 'fr',
+      'de': 'de',
+      'ru': 'ru',
+      'ar': 'ar',
+      'hi': 'hi',
+      'pt': 'pt',
+      'it': 'it',
+      'yue': 'zh', // ElevenLabs 不支持粤语，映射为中文
     },
   };
 
@@ -613,6 +643,7 @@ export async function callGenericASR(
       const requestBody = {
         contents: [
           {
+            role: 'user',
             parts: [
               {
                 inline_data: {
@@ -636,14 +667,23 @@ export async function callGenericASR(
       console.log('音频大小:', audioBuffer.length, 'bytes');
       console.log('语言:', mappedLanguage || '自动检测');
 
-      response = await fetch(apiUrl, {
+      // 获取代理配置
+      const proxyAgent = getProxyAgent();
+      const fetchOptions: any = {
         method: config.method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${accessToken}`,
         },
         body: JSON.stringify(requestBody),
-      });
+      };
+
+      // 如果有代理配置，添加 dispatcher
+      if (proxyAgent) {
+        fetchOptions.dispatcher = proxyAgent;
+      }
+
+      response = await fetch(apiUrl, fetchOptions);
     } else {
       // 其他API使用JSON格式
       let requestBody: any;
@@ -917,6 +957,14 @@ export async function callGenericTTS(
     const language = detectDefaultLanguage();
     const languageType = language ? (languageTypeMap[language] || 'Chinese') : undefined;
 
+    // 映射语言代码到供应商特定格式（用于 ElevenLabs 等）
+    const mappedLanguage = mapLanguageCode(language, config.templateType);
+    console.log('🔍 TTS 语言参数映射调试:', {
+      原始语言: language,
+      模板类型: config.templateType,
+      映射后语言: mappedLanguage,
+    });
+
     // 根据供应商类型选择正确的速度参数
     let speedValue = options?.speed !== undefined ? options.speed : 1.0;
     if (config.templateType === 'cartesia' && options?.cartesiaSpeed !== undefined) {
@@ -928,7 +976,7 @@ export async function callGenericTTS(
       model: modelId,
       voice: voiceId,
       speed: speedValue,
-      language: language, // auto 模式时为 undefined，让模型自己识别
+      language: mappedLanguage || '', // 使用映射后的语言代码，auto 模式时为空
       language_type: languageType, // auto 模式时为 undefined
       format: 'wav', // 统一使用 WAV 格式
       sample_rate: 24000, // 统一使用 24kHz 采样率
@@ -1122,8 +1170,14 @@ export async function callGenericTTS(
       apiUrl = apiUrl.replace('{voice}', voiceId);
       // 可选：添加查询参数（output_format, optimize_streaming_latency）
       const outputFormat = 'mp3_44100_128'; // 默认格式
-      const optimizeLatency = 2; // 默认优化级别
-      apiUrl += `?output_format=${outputFormat}&optimize_streaming_latency=${optimizeLatency}`;
+
+      // eleven_v3 模型不支持 optimize_streaming_latency 参数
+      if (modelId === 'eleven_v3') {
+        apiUrl += `?output_format=${outputFormat}`;
+      } else {
+        const optimizeLatency = 2; // 默认优化级别
+        apiUrl += `?output_format=${outputFormat}&optimize_streaming_latency=${optimizeLatency}`;
+      }
     }
 
     // 调试日志
@@ -1710,6 +1764,10 @@ export async function callDoubaoTTS(
     const apiUrl = 'https://openspeech.bytedance.com/api/v3/tts/unidirectional';
 
     // 3. 构建请求体（按官方 demo 的 V3 单向流式结构）
+    // 检测语言参数
+    const language = options?.language || 'zh';
+    const mappedLanguage = mapLanguageCode(language, 'doubao') || 'zh-CN';
+
     const requestBody = {
       user: {
         uid: 'user_001',
@@ -1720,10 +1778,11 @@ export async function callDoubaoTTS(
         audio_params: {
           format: 'wav',
           sample_rate: 24000,
+          speech_rate: clampedSpeechRate,
           enable_timestamp: false,
         },
         additions: JSON.stringify({
-          explicit_language: 'zh',
+          explicit_language: mappedLanguage,
           disable_markdown_filter: true,
           enable_timestamp: false,
         }),

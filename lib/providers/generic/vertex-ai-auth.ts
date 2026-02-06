@@ -3,6 +3,8 @@
  * 用于生成访问令牌（Access Token）
  */
 
+import { ProxyAgent } from 'undici';
+
 interface ServiceAccountCredentials {
   type: string;
   project_id: string;
@@ -15,6 +17,20 @@ interface ServiceAccountCredentials {
   auth_provider_x509_cert_url: string;
   client_x509_cert_url: string;
   universe_domain: string;
+}
+
+/**
+ * 获取代理配置
+ */
+function getProxyAgent(): ProxyAgent | undefined {
+  const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
+
+  if (proxyUrl) {
+    console.log('使用代理:', proxyUrl.replace(/\/\/.*@/, '//*****@')); // 隐藏密码
+    return new ProxyAgent(proxyUrl);
+  }
+
+  return undefined;
 }
 
 /**
@@ -84,7 +100,8 @@ export async function getVertexAIAccessToken(
     const jwt = await createJWT(serviceAccount);
 
     // 交换 JWT 获取访问令牌
-    const response = await fetch(serviceAccount.token_uri, {
+    const proxyAgent = getProxyAgent();
+    const fetchOptions: any = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -93,7 +110,14 @@ export async function getVertexAIAccessToken(
         grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
         assertion: jwt,
       }),
-    });
+    };
+
+    // 如果有代理配置，添加 dispatcher
+    if (proxyAgent) {
+      fetchOptions.dispatcher = proxyAgent;
+    }
+
+    const response = await fetch(serviceAccount.token_uri, fetchOptions);
 
     if (!response.ok) {
       const errorText = await response.text();
