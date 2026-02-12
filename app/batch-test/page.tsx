@@ -240,7 +240,7 @@ export default function BatchTestPage() {
                       )}
                     </div>
 
-                    {batch.tags.length > 0 && (
+                    {Array.isArray(batch.tags) && batch.tags.length > 0 && (
                       <div className="flex gap-2 mt-3">
                         {batch.tags.map((tag) => (
                           <span

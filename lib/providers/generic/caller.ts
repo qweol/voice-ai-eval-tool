@@ -915,6 +915,20 @@ export async function callGenericTTS(
       return await callDoubaoTTS(config, text, options);
     }
 
+    // 特殊处理：Gemini TTS
+    if (config.templateType === 'gemini') {
+      // 检测是否为纯 TTS 模型（模型名以 -tts 结尾）
+      const isPureTTS = modelId.endsWith('-tts');
+
+      if (isPureTTS) {
+        console.log('🔄 检测到 Gemini 纯 TTS 模型，使用 HTTP REST API');
+        return await callGeminiTTS(config, text, options);
+      } else {
+        console.log('🔄 检测到 Gemini Live API 模型，使用 WebSocket');
+        return await callGeminiLiveTTS(config, text, options);
+      }
+    }
+
     // 1. 准备变量
     const voiceId = getVoiceId(config, options?.voice);
     
@@ -1178,6 +1192,24 @@ export async function callGenericTTS(
         const optimizeLatency = 2; // 默认优化级别
         apiUrl += `?output_format=${outputFormat}&optimize_streaming_latency=${optimizeLatency}`;
       }
+
+      // 处理 voice_settings 中的 speed 参数，确保是数字类型
+      if (requestBody.voice_settings && typeof requestBody.voice_settings === 'object') {
+        if (requestBody.voice_settings.speed !== undefined) {
+          const speedValue = typeof requestBody.voice_settings.speed === 'string'
+            ? parseFloat(requestBody.voice_settings.speed)
+            : Number(requestBody.voice_settings.speed);
+          if (!isNaN(speedValue)) {
+            requestBody.voice_settings.speed = speedValue;
+            console.log('✅ ElevenLabs: voice_settings.speed 转换为数字', speedValue);
+          }
+        }
+      }
+    }
+
+    // Speechmatics 特殊处理：替换 URL 中的 {voice} 占位符
+    if (config.templateType === 'speechmatics') {
+      apiUrl = apiUrl.replace('{voice}', voiceId);
     }
 
     // 调试日志
@@ -1235,7 +1267,56 @@ export async function callGenericTTS(
       responseBodyBuffer = Buffer.alloc(0);
     }
 
-    if (contentType.includes('application/json')) {
+    // Minimax HTTP 流式响应特殊处理（SSE格式）
+    if (config.templateType === 'minimax' && config.protocol === 'http' &&
+        (contentType.includes('text/event-stream') || contentType.includes('application/json'))) {
+      console.log('🔄 检测到 Minimax HTTP 流式响应，使用 SSE 解析');
+      const responseText = responseBodyBuffer.toString('utf-8');
+
+      const audioChunks: Buffer[] = [];
+
+      // SSE格式：每个事件以 "data: " 开头
+      const lines = responseText.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.substring(6); // 移除 "data: " 前缀
+          try {
+            const chunk = JSON.parse(jsonStr);
+
+            // 检查错误
+            if (chunk.base_resp && chunk.base_resp.status_code !== 0) {
+              const errorMsg = chunk.base_resp.status_msg || `错误码: ${chunk.base_resp.status_code}`;
+              console.error('Minimax HTTP API 错误:', JSON.stringify(chunk, null, 2));
+              throw new Error(`Minimax API 调用失败: ${errorMsg}`);
+            }
+
+            // 提取音频数据
+            // 注意：status: 1 表示增量音频块，status: 2 表示完成（可能包含完整音频）
+            // 为避免重复，只使用 status: 1 的增量块
+            if (chunk.data && chunk.data.audio && chunk.data.status === 1) {
+              const hexAudio = chunk.data.audio;
+              // 移除可能的 0x 前缀
+              const cleanHex = hexAudio.replace(/^0x/i, '').replace(/\s/g, '');
+              const audioChunk = Buffer.from(cleanHex, 'hex');
+              audioChunks.push(audioChunk);
+              console.log(`📦 接收音频块: ${audioChunk.length} bytes (status: ${chunk.data.status})`);
+            } else if (chunk.data && chunk.data.status === 2) {
+              console.log(`✅ 收到完成信号 (status: 2)，忽略此chunk以避免重复`);
+            }
+          } catch (error: any) {
+            console.error('解析 SSE 数据失败:', error.message, 'JSON:', jsonStr.substring(0, 200));
+          }
+        }
+      }
+
+      if (audioChunks.length === 0) {
+        throw new Error('未从流式响应中提取到音频数据');
+      }
+
+      audioBuffer = Buffer.concat(audioChunks);
+      console.log('✅ Minimax HTTP 流式音频拼接完成，总大小:', audioBuffer.length, 'bytes');
+    } else if (contentType.includes('application/json')) {
       // JSON响应，需要从响应中提取音频
       const responseText = responseBodyBuffer.toString('utf-8');
       let responseData: any = {};
@@ -1945,5 +2026,448 @@ export async function callDoubaoTTS(
   } catch (error: any) {
     console.error('❌ 豆包 TTS 调用失败:', error.message);
     throw new Error(`豆包 TTS API调用失败: ${error.message}`);
+  }
+}
+
+/**
+ * 调用 Gemini TTS API（使用 Vertex AI）
+ */
+export async function callGeminiTTS(
+  config: GenericProviderConfig,
+  text: string,
+  options?: TTSOptions
+): Promise<TTSResult> {
+  const startTime = Date.now();
+  let modelId = getModelId(config, 'tts');
+  const characterCount = text.length;
+  let ttfb: number | null = null;
+
+  try {
+    // 0. 模型名称映射：将旧的模型名称转换为新的 preview 版本
+    const modelNameMap: Record<string, string> = {
+      'gemini-2.5-flash-tts': 'gemini-2.5-flash-preview-tts',
+      'gemini-2.5-pro-tts': 'gemini-2.5-pro-preview-tts',
+    };
+
+    if (modelNameMap[modelId]) {
+      console.log(`⚠️ 检测到旧模型名称: ${modelId}，自动转换为: ${modelNameMap[modelId]}`);
+      modelId = modelNameMap[modelId];
+    }
+
+    // 1. 准备参数
+    let voiceId = getVoiceId(config, options?.voice);
+
+    // 检测并修正音色格式：Gemini TTS 使用简单的音色名称（如 Puck），而不是区域格式（如 zh-CN-Standard-A）
+    if (voiceId.includes('-') || voiceId.includes('_')) {
+      console.log(`⚠️ 检测到非 Gemini 格式的音色: ${voiceId}，使用默认音色 Puck`);
+      voiceId = 'Puck';
+    }
+
+    // 2. 替换 URL 中的 {model} 占位符，并使用 v1beta API
+    let apiUrl = config.apiUrl.replace('{model}', modelId);
+
+    // 额外处理：如果 URL 中已经硬编码了旧模型名称，直接替换
+    apiUrl = apiUrl.replace('gemini-2.5-flash-tts', modelId);
+    apiUrl = apiUrl.replace('gemini-2.5-pro-tts', modelId);
+
+    // 将 /v1/ 替换为 /v1beta/ 以支持音频输出
+    apiUrl = apiUrl.replace('/v1/', '/v1beta/');
+
+    // 3. 获取 Vertex AI 访问令牌
+    const { getCachedVertexAIAccessToken } = await import('./vertex-ai-auth');
+    const accessToken = await getCachedVertexAIAccessToken(config.apiKey || '');
+
+    // 4. 构建请求体（使用 camelCase 命名，符合 Gemini Live API 规范）
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            {
+              text: text
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName: voiceId
+            }
+          }
+        }
+      }
+    };
+
+    console.log('=== Gemini TTS API 调用信息 ===');
+    console.log('API URL:', apiUrl);
+    console.log('模型:', modelId);
+    console.log('音色:', voiceId);
+    console.log('文本长度:', text.length);
+
+    // 5. 发送请求
+    const proxyAgent = getProxyAgent();
+    const fetchOptions: any = {
+      method: config.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(requestBody),
+    };
+
+    // 如果有代理配置，添加 dispatcher
+    if (proxyAgent) {
+      fetchOptions.dispatcher = proxyAgent;
+    }
+
+    console.log('发送请求到:', apiUrl);
+    console.log('请求头:', JSON.stringify(fetchOptions.headers, null, 2));
+    console.log('请求体:', JSON.stringify(requestBody, null, 2));
+
+    const response = await fetch(apiUrl, fetchOptions);
+
+    ttfb = Date.now() - startTime;
+    console.log('TTFB (首字节耗时):', ttfb, 'ms');
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API 错误响应:', errorText);
+      throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    // 6. 解析响应
+    const responseData = await response.json();
+    console.log('响应结构:', JSON.stringify(responseData, null, 2).substring(0, 500));
+
+    // 7. 提取音频数据
+    const audioBase64 = responseData?.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data;
+
+    if (!audioBase64) {
+      throw new Error('响应中未找到音频数据');
+    }
+
+    // 8. 解码 base64 音频
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    console.log('音频解码成功，大小:', audioBuffer.length, 'bytes');
+
+    const totalTime = Date.now() - startTime;
+    const duration = totalTime / 1000;
+
+    console.log('🎉 Gemini TTS 调用成功');
+    console.log('总耗时:', totalTime, 'ms');
+
+    return {
+      audioBuffer,
+      duration,
+      ttfb,
+      totalTime,
+      format: 'wav',
+      modelId,
+      characterCount,
+    };
+  } catch (error: any) {
+    console.error('❌ Gemini TTS 调用失败:', error.message);
+    console.error('错误详情:', error);
+    console.error('错误堆栈:', error.stack);
+    throw new Error(`Gemini TTS API调用失败: ${error.message}`);
+  }
+}
+
+/**
+ * 为 PCM 数据添加 WAV 文件头
+ * @param pcmData - 原始 PCM 音频数据
+ * @param sampleRate - 采样率（Hz）
+ * @param bitsPerSample - 位深度（bits）
+ * @param channels - 声道数
+ * @returns 带有 WAV 文件头的完整音频数据
+ */
+function addWavHeader(
+  pcmData: Buffer,
+  sampleRate: number,
+  bitsPerSample: number,
+  channels: number
+): Buffer {
+  const dataSize = pcmData.length;
+  const byteRate = (sampleRate * channels * bitsPerSample) / 8;
+  const blockAlign = (channels * bitsPerSample) / 8;
+  const wavHeaderSize = 44;
+  const fileSize = wavHeaderSize + dataSize - 8;
+
+  const header = Buffer.alloc(wavHeaderSize);
+  let offset = 0;
+
+  // RIFF header
+  header.write('RIFF', offset); offset += 4;
+  header.writeUInt32LE(fileSize, offset); offset += 4;
+  header.write('WAVE', offset); offset += 4;
+
+  // fmt chunk
+  header.write('fmt ', offset); offset += 4;
+  header.writeUInt32LE(16, offset); offset += 4; // fmt chunk size
+  header.writeUInt16LE(1, offset); offset += 2; // audio format (1 = PCM)
+  header.writeUInt16LE(channels, offset); offset += 2;
+  header.writeUInt32LE(sampleRate, offset); offset += 4;
+  header.writeUInt32LE(byteRate, offset); offset += 4;
+  header.writeUInt16LE(blockAlign, offset); offset += 2;
+  header.writeUInt16LE(bitsPerSample, offset); offset += 2;
+
+  // data chunk
+  header.write('data', offset); offset += 4;
+  header.writeUInt32LE(dataSize, offset);
+
+  return Buffer.concat([header, pcmData]);
+}
+
+/**
+ * 调用 Gemini Live API（使用 WebSocket 流式连接）
+ * 官方文档：https://cloud.google.com/vertex-ai/generative-ai/docs/model-reference/multimodal-live
+ */
+export async function callGeminiLiveTTS(
+  config: GenericProviderConfig,
+  text: string,
+  options?: TTSOptions
+): Promise<TTSResult> {
+  const startTime = Date.now();
+  const modelId = getModelId(config, 'tts');
+  const characterCount = text.length;
+  let ttfb: number | null = null;
+
+  try {
+    // 1. 准备参数
+    const voiceId = getVoiceId(config, options?.voice);
+
+    // 2. 从 apiUrl 中提取 projectId 和 location
+    // URL 格式: https://aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{model}:generateContent
+    const urlMatch = config.apiUrl.match(/projects\/([^\/]+)\/locations\/([^\/]+)/);
+    if (!urlMatch) {
+      throw new Error('无法从 API URL 中提取 projectId 和 location');
+    }
+    const projectId = urlMatch[1];
+    let location = urlMatch[2];
+
+    // 3. 构建 WebSocket URL
+    // 注意：WebSocket 端点不支持 "global"，必须使用具体的区域
+    // 如果 location 是 "global"，则使用 "us-central1" 作为默认区域
+    if (location === 'global') {
+      console.log('⚠️ WebSocket 不支持 global 端点，自动切换到 us-central1');
+      location = 'us-central1';
+    }
+    const wsHost = `${location}-aiplatform.googleapis.com`;
+    const wsUrl = `wss://${wsHost}/ws/google.cloud.aiplatform.v1beta1.LlmBidiService/BidiGenerateContent`;
+
+    console.log('=== Gemini Live API (WebSocket) 调用信息 ===');
+    console.log('WebSocket URL:', wsUrl);
+    console.log('Project ID:', projectId);
+    console.log('Location:', location);
+    console.log('模型:', modelId);
+    console.log('音色:', voiceId);
+    console.log('文本长度:', text.length);
+
+    // 4. 获取 Vertex AI 访问令牌
+    const { getCachedVertexAIAccessToken } = await import('./vertex-ai-auth');
+    const accessToken = await getCachedVertexAIAccessToken(config.apiKey || '');
+
+    // 5. 配置代理（如果有）
+    const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.https_proxy || process.env.http_proxy;
+    let wsOptions: any = {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    };
+
+    if (proxyUrl) {
+      console.log('使用代理:', proxyUrl);
+      // 为 WebSocket 创建代理 agent
+      const { HttpsProxyAgent } = await import('https-proxy-agent');
+      wsOptions.agent = new HttpsProxyAgent(proxyUrl);
+    }
+
+    // 6. 建立 WebSocket 连接
+    const audioChunks: Buffer[] = [];
+    let setupComplete = false;
+    let turnComplete = false;
+
+    await new Promise<void>((resolve, reject) => {
+      const ws = new WebSocket(wsUrl, wsOptions);
+
+      ws.on('open', async () => {
+        console.log('✅ WebSocket 连接已建立');
+
+        // 6. 发送 setup 消息
+        const setupMessage = {
+          setup: {
+            model: `projects/${projectId}/locations/${location}/publishers/google/models/${modelId}`,
+            system_instruction: {
+              parts: [
+                {
+                  text: 'You are a text-to-speech system. Your only task is to read aloud the exact text provided by the user, without adding any additional words, responses, or commentary. Do not engage in conversation. Simply speak the text exactly as given.',
+                },
+              ],
+            },
+            generation_config: {
+              response_modalities: ['AUDIO'],
+              speech_config: {
+                voice_config: {
+                  prebuilt_voice_config: {
+                    voice_name: voiceId,
+                  },
+                },
+              },
+            },
+          },
+        };
+
+        console.log('📤 发送 setup 消息:', JSON.stringify(setupMessage, null, 2));
+        ws.send(JSON.stringify(setupMessage));
+      });
+
+      ws.on('message', async (data: Buffer) => {
+        try {
+          // 检查是否是二进制数据（音频）
+          if (data instanceof Buffer && data[0] !== 0x7b) { // 0x7b 是 '{' 的 ASCII 码
+            console.log('📥 收到音频数据块，大小:', data.length, 'bytes');
+            audioChunks.push(data);
+
+            if (ttfb === null) {
+              ttfb = Date.now() - startTime;
+              console.log('TTFB (首字节耗时):', ttfb, 'ms');
+            }
+            return;
+          }
+
+          // JSON 响应
+          const response = JSON.parse(data.toString());
+          console.log('📥 收到 JSON 响应:', JSON.stringify(response, null, 2).substring(0, 500));
+
+          // 处理 setup 完成响应
+          if (response.setupComplete) {
+            setupComplete = true;
+            console.log('✅ Setup 完成');
+
+            // 7. 发送文本内容
+            const clientMessage = {
+              client_content: {
+                turns: [
+                  {
+                    role: 'user',
+                    parts: [{ text: text }],
+                  },
+                ],
+                turn_complete: true,
+              },
+            };
+
+            console.log('📤 发送文本内容:', JSON.stringify(clientMessage, null, 2));
+            ws.send(JSON.stringify(clientMessage));
+            return;
+          }
+
+          // 处理服务器内容响应
+          if (response.serverContent) {
+            const serverContent = response.serverContent;
+
+            // 检查是否有模型回复
+            if (serverContent.modelTurn) {
+              console.log('📥 收到模型回复');
+
+              // 提取音频数据
+              const parts = serverContent.modelTurn.parts || [];
+              for (const part of parts) {
+                if (part.inlineData && part.inlineData.data) {
+                  // 将 base64 编码的音频数据解码为 Buffer
+                  const audioData = Buffer.from(part.inlineData.data, 'base64');
+                  console.log('📥 收到音频数据块，大小:', audioData.length, 'bytes');
+                  audioChunks.push(audioData);
+
+                  if (ttfb === null) {
+                    ttfb = Date.now() - startTime;
+                    console.log('TTFB (首字节耗时):', ttfb, 'ms');
+                  }
+                }
+              }
+            }
+
+            // 检查是否完成
+            if (serverContent.turnComplete) {
+              turnComplete = true;
+              console.log('✅ Turn 完成');
+              ws.close();
+              resolve();
+            }
+          }
+
+          // 处理错误
+          if (response.error) {
+            console.error('❌ 服务器返回错误:', response.error);
+            reject(new Error(`服务器错误: ${JSON.stringify(response.error)}`));
+            ws.close();
+          }
+        } catch (error) {
+          console.error('❌ 处理消息时出错:', error);
+          reject(error);
+          ws.close();
+        }
+      });
+
+      ws.on('error', (error) => {
+        console.error('❌ WebSocket 错误:', error);
+        reject(error);
+      });
+
+      ws.on('close', (code, reason) => {
+        console.log('🔌 WebSocket 连接已关闭');
+        console.log('关闭代码:', code);
+        console.log('关闭原因:', reason.toString());
+        if (!turnComplete) {
+          reject(new Error(`WebSocket 连接意外关闭 (code: ${code}, reason: ${reason.toString()})`));
+        }
+      });
+
+      // 设置超时（30秒）
+      setTimeout(() => {
+        if (!turnComplete) {
+          console.error('❌ WebSocket 连接超时');
+          ws.close();
+          reject(new Error('WebSocket 连接超时'));
+        }
+      }, 30000);
+    });
+
+    // 8. 合并音频数据
+    if (audioChunks.length === 0) {
+      throw new Error('未收到音频数据');
+    }
+
+    const pcmBuffer = Buffer.concat(audioChunks);
+    console.log('✅ 音频数据合并完成，总大小:', pcmBuffer.length, 'bytes');
+
+    // 9. 将 PCM 数据转换为 WAV 格式
+    // Gemini Live API 返回的音频参数：24000 Hz, 16-bit, mono
+    const wavBuffer = addWavHeader(pcmBuffer, 24000, 16, 1);
+    console.log('✅ WAV 文件头已添加，总大小:', wavBuffer.length, 'bytes');
+
+    const totalTime = Date.now() - startTime;
+    const duration = totalTime / 1000;
+
+    console.log('🎉 Gemini Live API 调用成功');
+    console.log('总耗时:', totalTime, 'ms');
+
+    return {
+      audioBuffer: wavBuffer,
+      duration,
+      ttfb,
+      totalTime,
+      format: 'wav',
+      modelId,
+      characterCount,
+    };
+  } catch (error: any) {
+    console.error('❌ Gemini Live API 调用失败:', error.message);
+    console.error('错误详情:', error);
+    console.error('错误堆栈:', error.stack);
+    throw new Error(`Gemini Live API调用失败: ${error.message}`);
   }
 }

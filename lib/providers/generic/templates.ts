@@ -718,6 +718,22 @@ function getDefaultMinimaxVoices(): VoiceDefinition[] {
  * Gemini 模型定义
  * 参考：https://ai.google.dev/gemini-api/docs/audio
  */
+/**
+ * Gemini Live API 音色定义
+ * 参考：https://ai.google.dev/gemini-api/docs/audio
+ * 注意：Gemini Live API 使用天体主题的音色名称，支持多语言
+ */
+const geminiVoices: VoiceDefinition[] = [
+  { id: 'Puck', name: 'Puck', description: '对话友好（默认）', gender: 'neutral' },
+  { id: 'Charon', name: 'Charon', description: '深沉权威', gender: 'male' },
+  { id: 'Kore', name: 'Kore', description: '中性专业', gender: 'neutral' },
+  { id: 'Fenrir', name: 'Fenrir', description: '温暖亲切', gender: 'neutral' },
+  { id: 'Aoede', name: 'Aoede', description: '天体主题音色', gender: 'female' },
+  { id: 'Orbit', name: 'Orbit', description: '天体主题音色', gender: 'neutral' },
+  { id: 'Vega', name: 'Vega', description: '天体主题音色', gender: 'female' },
+  { id: 'Orion', name: 'Orion', description: '天体主题音色', gender: 'male' },
+];
+
 const geminiModels: ModelDefinition[] = [
   // ASR模型
   {
@@ -736,17 +752,60 @@ const geminiModels: ModelDefinition[] = [
     supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
     maxFileSize: 100 * 1024 * 1024, // 100MB (估计值)
   },
+  // TTS模型 - Gemini 纯 TTS API
+  {
+    id: 'gemini-2.5-flash-preview-tts',
+    name: 'Gemini 2.5 Flash TTS (Preview)',
+    description: '纯 TTS 模型，低延迟优化，只朗读文本不生成对话，支持30种音色',
+    type: 'tts',
+    voices: geminiVoices,
+    supportedFormats: ['wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+  },
+  {
+    id: 'gemini-2.5-pro-preview-tts',
+    name: 'Gemini 2.5 Pro TTS (Preview)',
+    description: '纯 TTS 模型，质量优化，只朗读文本不生成对话，支持30种音色',
+    type: 'tts',
+    voices: geminiVoices,
+    supportedFormats: ['wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+  },
+  // TTS模型 - Gemini Live API（对话式，已废弃）
+  {
+    id: 'gemini-live-2.5-flash-native-audio',
+    name: 'Gemini Live 2.5 Flash (Native Audio)',
+    description: '对话式语音代理，会生成回复而非纯朗读（已废弃，建议使用纯TTS模型）',
+    type: 'tts',
+    voices: geminiVoices,
+    supportedFormats: ['wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+  },
+  {
+    id: 'gemini-live-2.5-flash-preview-native-audio-09-2025',
+    name: 'Gemini Live 2.5 Flash Preview (Native Audio)',
+    description: '预览版。实时语音代理的成本效益选择，支持原生音频和情感对话',
+    type: 'tts',
+    voices: geminiVoices,
+    supportedFormats: ['wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+    supportedLanguages: ['zh', 'en', 'ja', 'ko', 'es', 'fr', 'de', 'ru', 'ar', 'hi', 'pt', 'it', 'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'no', 'fi'],
+  },
 ];
 
 /**
  * Gemini 风格模板
- * 适用于：Google Vertex AI Gemini API (Audio Transcription)
+ * 适用于：Google Vertex AI Gemini API (Audio Transcription & Text-to-Speech)
  *
  * API文档: https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini
  *
  * 注意:
  * - 使用 Vertex AI 服务账号认证（OAuth2）
- * - 支持 base64 编码的音频数据（inline_data）
+ * - ASR: 支持 base64 编码的音频数据（inline_data）
+ * - TTS: 支持通过 speech_config 控制音色、语速、语调等
  * - 通过 prompt 控制转录行为（如：语言检测、时间戳、说话人识别等）
  * - 支持多语言自动识别和翻译
  * - 可处理长达约 8.4 小时的音频文件
@@ -755,7 +814,7 @@ const geminiModels: ModelDefinition[] = [
 export const geminiTemplate: APITemplate = {
   id: 'gemini',
   name: 'Gemini风格',
-  description: '适用于 Google Vertex AI Gemini 语音识别服务，支持多语言、长音频转录',
+  description: '适用于 Google Vertex AI Gemini 语音服务，支持 ASR（语音识别）和 TTS（语音合成），多语言、高质量',
   defaultApiUrl: 'https://aiplatform.googleapis.com/v1/projects/{projectId}/locations/{location}/publishers/google/models/{model}:generateContent',
   defaultMethod: 'POST',
   authType: 'custom', // 使用 custom 类型，通过 OAuth2 Bearer Token 认证
@@ -780,11 +839,32 @@ export const geminiTemplate: APITemplate = {
         }
       ]
     }, null, 2),
-    tts: undefined, // Gemini 主要用于 ASR，TTS 功能有限
+    tts: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: '{text}'
+            }
+          ]
+        }
+      ],
+      generation_config: {
+        response_modalities: ['AUDIO'],
+        speech_config: {
+          voice_config: {
+            prebuilt_voice_config: {
+              voice_name: '{voice}'
+            }
+          }
+        }
+      }
+    }, null, 2)
   },
   responseTextPath: 'candidates.0.content.parts.0.text',
-  responseAudioPath: undefined,
-  responseAudioFormat: undefined,
+  responseAudioPath: 'candidates.0.content.parts.0.inline_data.data',
+  responseAudioFormat: 'base64',
   errorPath: 'error.message',
   variables: [
     { description: '模型名称（如：gemini-2.5-flash, gemini-3-flash）', required: true, default: 'gemini-2.5-flash' },
@@ -800,7 +880,7 @@ export const geminiTemplate: APITemplate = {
   // 默认模型
   defaultModel: {
     asr: 'gemini-2.5-flash',
-    tts: undefined, // 不支持 TTS
+    tts: 'gemini-2.5-flash-preview-tts',
   },
 };
 
@@ -1118,6 +1198,7 @@ export const elevenlabsTemplate: APITemplate = {
         stability: 0.5,
         similarity_boost: 0.75,
         style: 0,
+        speed: '{speed}', // 语速参数：1.0为正常速度，<1.0减慢，>1.0加快
         use_speaker_boost: true,
       },
       apply_text_normalization: 'on',
@@ -1142,6 +1223,182 @@ export const elevenlabsTemplate: APITemplate = {
   defaultModel: {
     asr: undefined, // 不支持 ASR
     tts: 'eleven_turbo_v2_5',
+  },
+};
+
+/**
+ * Speechmatics TTS 音色定义
+ * 参考：https://docs.speechmatics.com/text-to-speech/voices
+ */
+const speechmaticsVoices: VoiceDefinition[] = [
+  { id: 'sarah', name: 'Sarah', description: 'British English female voice', gender: 'female', language: 'en-GB' },
+  { id: 'theo', name: 'Theo', description: 'British English male voice', gender: 'male', language: 'en-GB' },
+  { id: 'amelia', name: 'Amelia', description: 'American English female voice', gender: 'female', language: 'en-US' },
+  { id: 'james', name: 'James', description: 'American English male voice', gender: 'male', language: 'en-US' },
+];
+
+/**
+ * Speechmatics 模型定义
+ * 参考：https://docs.speechmatics.com/text-to-speech/models
+ */
+const speechmaticsModels: ModelDefinition[] = [
+  {
+    id: 'tts-1',
+    name: 'Speechmatics TTS Standard',
+    description: 'Standard TTS model with natural voice quality',
+    type: 'tts',
+    voices: speechmaticsVoices,
+    supportedFormats: ['mp3', 'wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+];
+
+/**
+ * Speechmatics 风格模板
+ * 适用于：Speechmatics Text-to-Speech API
+ *
+ * API文档: https://docs.speechmatics.com/text-to-speech/quickstart
+ *
+ * 注意:
+ * - 使用 Bearer Token 认证
+ * - Voice 名称在 URL 路径中
+ * - 请求体只需要 text 字段
+ * - 返回音频流（WAV 格式）
+ */
+export const speechmaticsTemplate: APITemplate = {
+  id: 'speechmatics',
+  name: 'Speechmatics风格',
+  description: '适用于 Speechmatics TTS API，支持多语言高质量语音合成',
+  defaultApiUrl: 'https://preview.tts.speechmatics.com/generate/{voice}',
+  defaultMethod: 'POST',
+  authType: 'bearer', // 使用 Bearer Token 认证
+  isBuiltin: true,
+  requestBodyTemplate: {
+    asr: undefined, // Speechmatics TTS 不支持 ASR
+    tts: JSON.stringify({
+      text: '{text}',
+    }, null, 2),
+  },
+  responseTextPath: undefined,
+  responseAudioPath: '', // 直接返回音频流
+  responseAudioFormat: 'stream',
+  errorPath: 'error.message',
+  variables: [
+    { description: '音色名称（如：sarah, theo, amelia, james）', required: true, default: 'sarah' },
+  ],
+
+  // 模型列表
+  models: speechmaticsModels,
+
+  // 不允许自定义模型
+  allowCustomModel: false,
+
+  // 默认模型
+  defaultModel: {
+    asr: undefined, // 不支持 ASR
+    tts: 'tts-1',
+  },
+};
+
+/**
+ * Rime.ai TTS 音色定义
+ * 参考：https://users.rime.ai/data/voices/all-v2.json
+ */
+const rimeVoices: VoiceDefinition[] = [
+  // Arcana 模型音色（超逼真，支持多语言）
+  { id: 'luna', name: 'Luna', description: 'Natural and expressive voice', gender: 'female', language: 'any' },
+  { id: 'celeste', name: 'Celeste', description: 'Warm and engaging voice', gender: 'female', language: 'any' },
+  { id: 'orion', name: 'Orion', description: 'Clear and professional voice', gender: 'male', language: 'any' },
+
+  // Mistv2 模型音色（低延迟，英语）
+  { id: 'abbie', name: 'Abbie', description: 'Friendly English voice', gender: 'female', language: 'en' },
+  { id: 'allison', name: 'Allison', description: 'Professional English voice', gender: 'female', language: 'en' },
+  { id: 'hudson', name: 'Hudson', description: 'Clear male English voice', gender: 'male', language: 'en' },
+];
+
+/**
+ * Rime.ai 模型定义
+ * 参考：https://docs.rime.ai/
+ */
+const rimeModels: ModelDefinition[] = [
+  {
+    id: 'mist',
+    name: 'Mist',
+    description: 'Fast and accurate TTS model with low latency',
+    type: 'tts',
+    voices: rimeVoices,
+    supportedFormats: ['mp3', 'wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'mistv2',
+    name: 'Mist v2',
+    description: 'Enhanced version with better quality and control',
+    type: 'tts',
+    voices: rimeVoices,
+    supportedFormats: ['mp3', 'wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+  {
+    id: 'arcana',
+    name: 'Arcana',
+    description: 'Ultra-realistic voices for natural conversations',
+    type: 'tts',
+    voices: rimeVoices,
+    supportedFormats: ['mp3', 'wav', 'pcm'],
+    speedRange: [0.5, 2.0],
+  },
+];
+
+/**
+ * Rime.ai 风格模板
+ * 适用于：Rime.ai Text-to-Speech API
+ *
+ * API文档: https://docs.rime.ai/
+ *
+ * 注意:
+ * - 使用 Bearer Token 认证
+ * - 支持流式输出（SSE 和 WebSocket）
+ * - 支持多种语言和超逼真音色
+ * - 低延迟（目标 <200ms）
+ */
+export const rimeTemplate: APITemplate = {
+  id: 'rime',
+  name: 'Rime.ai风格',
+  description: '适用于 Rime.ai TTS API，支持超逼真音色和低延迟流式输出',
+  defaultApiUrl: 'https://users.rime.ai/v1/rime-tts',
+  defaultMethod: 'POST',
+  authType: 'bearer',
+  isBuiltin: true,
+  requestBodyTemplate: {
+    asr: undefined, // Rime.ai 不支持 ASR
+    tts: JSON.stringify({
+      text: '{text}',
+      speaker: '{voice}',
+      modelId: '{model}',
+      speedAlpha: '{speed}',
+      reduceLatency: true,
+    }, null, 2),
+  },
+  responseTextPath: undefined,
+  responseAudioPath: '', // 直接返回音频流
+  responseAudioFormat: 'stream',
+  errorPath: 'error.message',
+  variables: [
+    { description: '模型名称（如：arcana, mistv2, mist）', required: true, default: 'arcana' },
+    { description: '音色名称（如：luna, celeste, orion）', required: true, default: 'luna' },
+  ],
+
+  // 模型列表
+  models: rimeModels,
+
+  // 允许自定义模型
+  allowCustomModel: false,
+
+  // 默认模型
+  defaultModel: {
+    asr: undefined, // 不支持 ASR
+    tts: 'arcana',
   },
 };
 
@@ -1236,6 +1493,8 @@ export const templates: Record<TemplateType, APITemplate> = {
   deepgram: deepgramTemplate,
   gemini: geminiTemplate,
   elevenlabs: elevenlabsTemplate,
+  speechmatics: speechmaticsTemplate,
+  rime: rimeTemplate,
   custom: customTemplate,
 };
 

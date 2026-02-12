@@ -108,6 +108,7 @@ export default function BatchTestDetailPage() {
   const [showProviderModal, setShowProviderModal] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [progress, setProgress] = useState<any>(null);
+  const [batchCount, setBatchCount] = useState(1); // 批量运行次数，默认1次
 
   useEffect(() => {
     loadBatch();
@@ -165,7 +166,8 @@ export default function BatchTestDetailPage() {
       return;
     }
 
-    if (!confirm(`确定要执行测试吗？\n\n将测试 ${batch.testCases.length} 个用例 × ${batch.providers.length} 个供应商 = ${batch.testCases.length * batch.providers.length} 次调用`)) {
+    const totalCalls = batch.testCases.length * batch.providers.length * batchCount;
+    if (!confirm(`确定要执行测试吗？\n\n将测试 ${batch.testCases.length} 个用例 × ${batch.providers.length} 个供应商 × ${batchCount} 次 = ${totalCalls} 次调用`)) {
       return;
     }
 
@@ -173,6 +175,8 @@ export default function BatchTestDetailPage() {
       setExecuting(true);
       const response = await fetch(`/api/batch-test/${batchId}/execute`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchCount }),
       });
 
       const result = await response.json();
@@ -317,7 +321,7 @@ export default function BatchTestDetailPage() {
           )}
 
           {/* 操作按钮 */}
-          <div className="flex gap-4">
+          <div className="flex gap-4 items-center flex-wrap">
             {batch.status === 'DRAFT' && (
               <>
                 <button
@@ -332,6 +336,22 @@ export default function BatchTestDetailPage() {
                 >
                   选择供应商
                 </button>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-600 font-medium">批量次数</span>
+                  <select
+                    value={batchCount}
+                    onChange={(e) => setBatchCount(Number(e.target.value))}
+                    className="border-2 border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-800 focus:outline-none focus:border-blue-500 transition-all"
+                  >
+                    {Array.from({ length: 10 }, (_, idx) => idx + 1).map(n => (
+                      <option key={n} value={n}>
+                        {n} 次
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <button
                   onClick={handleExecute}
                   disabled={executing}
@@ -439,7 +459,7 @@ export default function BatchTestDetailPage() {
 }
 
 function TestCasesTab({ batch, onUpdate }: { batch: BatchTest; onUpdate: () => void }) {
-  if (batch.testCases.length === 0) {
+  if (!Array.isArray(batch.testCases) || batch.testCases.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="text-6xl mb-4">📝</div>
@@ -457,7 +477,7 @@ function TestCasesTab({ batch, onUpdate }: { batch: BatchTest; onUpdate: () => v
             <div className="text-gray-500 font-mono">{index + 1}</div>
             <div className="flex-1">
               <div className="text-gray-800 mb-2">{testCase.text}</div>
-              {testCase.tags.length > 0 && (
+              {Array.isArray(testCase.tags) && testCase.tags.length > 0 && (
                 <div className="flex gap-2">
                   {testCase.tags.map((tag) => (
                     <span
@@ -481,8 +501,9 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
   const [showBadCaseModal, setShowBadCaseModal] = useState(false);
   const [selectedResult, setSelectedResult] = useState<{ testCase: TestCase; result: TestResult } | null>(null);
   const [selectedProviders, setSelectedProviders] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
-  if (batch.results.length === 0) {
+  if (!Array.isArray(batch.results) || batch.results.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="text-6xl mb-4">📊</div>
@@ -492,10 +513,59 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
     );
   }
 
-  const resultsByCase = batch.testCases.map((testCase) => ({
-    testCase,
-    results: batch.results.filter((r) => r.testCaseId === testCase.id),
-  }));
+  // 按用例+供应商分组，计算统计信息
+  const resultsByCase = Array.isArray(batch.testCases) ? batch.testCases.map((testCase) => {
+    const caseResults = batch.results.filter((r) => r.testCaseId === testCase.id);
+
+    // 按供应商分组
+    const providerGroups = new Map<string, TestResult[]>();
+    caseResults.forEach((result) => {
+      const key = result.provider;
+      if (!providerGroups.has(key)) {
+        providerGroups.set(key, []);
+      }
+      providerGroups.get(key)!.push(result);
+    });
+
+    // 计算每个供应商的统计信息
+    const providerStats = Array.from(providerGroups.entries()).map(([provider, results]) => {
+      const successResults = results.filter(r => r.status === 'SUCCESS');
+      const failedResults = results.filter(r => r.status !== 'SUCCESS');
+
+      // 计算统计信息
+      const ttfbValues = successResults.map(r => r.ttfb).filter((v): v is number => v != null);
+      const totalTimeValues = successResults.map(r => r.totalTime).filter((v): v is number => v != null);
+      const costValues = successResults.map(r => r.cost).filter((v): v is number => typeof v === 'number');
+
+      return {
+        provider,
+        results,
+        successCount: successResults.length,
+        failedCount: failedResults.length,
+        stats: {
+          ttfb: ttfbValues.length > 0 ? {
+            avg: ttfbValues.reduce((a, b) => a + b, 0) / ttfbValues.length,
+            min: Math.min(...ttfbValues),
+            max: Math.max(...ttfbValues),
+          } : null,
+          totalTime: totalTimeValues.length > 0 ? {
+            avg: totalTimeValues.reduce((a, b) => a + b, 0) / totalTimeValues.length,
+            min: Math.min(...totalTimeValues),
+            max: Math.max(...totalTimeValues),
+          } : null,
+          cost: costValues.length > 0 ? {
+            avg: costValues.reduce((a, b) => a + b, 0) / costValues.length,
+            sum: costValues.reduce((a, b) => a + b, 0),
+          } : null,
+        },
+      };
+    });
+
+    return {
+      testCase,
+      providerStats,
+    };
+  }) : [];
 
   // 从批次配置中获取供应商名称
   const getProviderName = (providerId: string): string => {
@@ -509,6 +579,16 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
   const handleMarkAsBadCase = (testCase: TestCase, result: TestResult) => {
     setSelectedResult({ testCase, result });
     setShowBadCaseModal(true);
+  };
+
+  const toggleGroup = (groupKey: string) => {
+    const newExpanded = new Set(expandedGroups);
+    if (newExpanded.has(groupKey)) {
+      newExpanded.delete(groupKey);
+    } else {
+      newExpanded.add(groupKey);
+    }
+    setExpandedGroups(newExpanded);
   };
 
   const handleToggleProvider = (providerId: string) => {
@@ -615,14 +695,14 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
         avgDurationSec,
         totalCostUsd,
       },
-      cases: resultsByCase.map(({ testCase, results }) => ({
+      cases: resultsByCase.map(({ testCase, providerStats }) => ({
         id: testCase.id,
         orderIndex: testCase.orderIndex,
         text: testCase.text,
         category: testCase.category,
         expectedVoice: testCase.expectedVoice,
         tags: testCase.tags || [],
-        results,
+        results: providerStats.flatMap(stat => stat.results),
       })),
       results: batch.results,
     };
@@ -678,43 +758,121 @@ function TestResultsTab({ batch }: { batch: BatchTest }) {
         </button>
       </div>
       <div className="space-y-6">
-        {resultsByCase.map(({ testCase, results }) => (
+        {resultsByCase.map(({ testCase, providerStats }) => (
           <div key={testCase.id} className="border rounded-lg p-4">
             <div className="font-medium text-gray-800 mb-4">{testCase.text}</div>
             <div className="grid gap-4">
-              {results.map((result) => (
-                <div key={result.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded">
-                  <input
-                    type="checkbox"
-                    checked={selectedProviders.has(result.provider)}
-                    onChange={() => handleToggleProvider(result.provider)}
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                    title="选择此模型"
-                  />
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-700">{getProviderName(result.provider)}</div>
-                    {result.status === 'SUCCESS' ? (
-                      <div className="text-sm text-gray-600">
-                        首token: {result.ttfb != null ? `${result.ttfb}ms` : '-'} | 总耗时: {result.totalTime != null ? `${result.totalTime}ms` : '-'} | 成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
+              {providerStats.map((stat) => {
+                const groupKey = `${testCase.id}-${stat.provider}`;
+                const isExpanded = expandedGroups.has(groupKey);
+
+                return (
+                  <div key={stat.provider} className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-center gap-4 mb-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedProviders.has(stat.provider)}
+                        onChange={() => handleToggleProvider(stat.provider)}
+                        className="w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                        title="选择此模型"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-700 mb-1">
+                          {getProviderName(stat.provider)} ({stat.results.length} 次运行)
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          成功: {stat.successCount} 次 · 失败: {stat.failedCount} 次
+                        </div>
                       </div>
-                    ) : (
-                      <div className="text-sm text-red-600">{result.error}</div>
+                    </div>
+
+                    {/* 统计信息 */}
+                    {stat.successCount > 0 && (
+                      <div className="grid grid-cols-3 gap-4 mb-3 p-3 bg-white rounded">
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">首Token</div>
+                          <div className="text-sm font-medium">
+                            {stat.stats.ttfb ? (
+                              <>
+                                均值: {Math.round(stat.stats.ttfb.avg)}ms<br/>
+                                最快: {Math.round(stat.stats.ttfb.min)}ms<br/>
+                                最慢: {Math.round(stat.stats.ttfb.max)}ms
+                              </>
+                            ) : '-'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">总耗时</div>
+                          <div className="text-sm font-medium">
+                            {stat.stats.totalTime ? (
+                              <>
+                                均值: {Math.round(stat.stats.totalTime.avg)}ms<br/>
+                                最快: {Math.round(stat.stats.totalTime.min)}ms<br/>
+                                最慢: {Math.round(stat.stats.totalTime.max)}ms
+                              </>
+                            ) : '-'}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500 mb-1">成本</div>
+                          <div className="text-sm font-medium">
+                            {stat.stats.cost ? (
+                              <>
+                                均值: ${stat.stats.cost.avg.toFixed(4)}<br/>
+                                总计: ${stat.stats.cost.sum.toFixed(4)}
+                              </>
+                            ) : '-'}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 展开/折叠按钮 */}
+                    <button
+                      onClick={() => toggleGroup(groupKey)}
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      {isExpanded ? '▼ 收起明细' : '▶ 展开明细'} ({stat.results.length} 次)
+                    </button>
+
+                    {/* 明细列表 */}
+                    {isExpanded && (
+                      <div className="mt-3 space-y-2">
+                        {stat.results.map((result, idx) => (
+                          <div key={result.id} className="flex items-center gap-4 p-3 bg-white rounded border">
+                            <div className="text-sm font-medium text-gray-500 w-16">
+                              第 {idx + 1} 次
+                            </div>
+                            <div className="flex-1">
+                              {result.status === 'SUCCESS' ? (
+                                <div className="text-sm text-gray-600">
+                                  首token: {result.ttfb != null ? `${result.ttfb}ms` : '-'} |
+                                  总耗时: {result.totalTime != null ? `${result.totalTime}ms` : '-'} |
+                                  成本: ${result.cost ? Number(result.cost).toFixed(4) : '0.0000'}
+                                </div>
+                              ) : (
+                                <div className="text-sm text-red-600">{result.error}</div>
+                              )}
+                            </div>
+                            {result.audioUrl && (
+                              <audio controls className="h-10">
+                                <source src={result.audioUrl} type="audio/mpeg" />
+                              </audio>
+                            )}
+                            <button
+                              onClick={() => handleMarkAsBadCase(testCase, result)}
+                              className="px-3 py-1.5 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 whitespace-nowrap"
+                              title="标注为 BadCase"
+                            >
+                              标注 BadCase
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-                  {result.audioUrl && (
-                    <audio controls className="h-10">
-                      <source src={result.audioUrl} type="audio/mpeg" />
-                    </audio>
-                  )}
-                  <button
-                    onClick={() => handleMarkAsBadCase(testCase, result)}
-                    className="px-3 py-1.5 bg-orange-600 text-white text-sm rounded hover:bg-orange-700 whitespace-nowrap"
-                    title="标注为 BadCase"
-                  >
-                    标注 BadCase
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
@@ -915,6 +1073,14 @@ function ProviderModal({
   const [availableProviders, setAvailableProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [templates, setTemplates] = useState<any>({});
+
+  // 存储每个供应商的模型和音色选择
+  const [providerSelections, setProviderSelections] = useState<Record<string, {
+    ttsModel?: string;
+    asrModel?: string;
+    voice?: string;
+  }>>({});
 
   // 加载所有供应商（包括系统预置）
   useEffect(() => {
@@ -922,7 +1088,23 @@ function ProviderModal({
       try {
         const { getAllProvidersWithSystem } = await import('@/lib/utils/config');
         const allProviders = await getAllProvidersWithSystem();
-        setAvailableProviders(allProviders.filter((p) => p.enabled));
+        const enabledProviders = allProviders.filter((p) => p.enabled);
+        setAvailableProviders(enabledProviders);
+
+        // 加载模板定义
+        const { templates: templateDefs } = await import('@/lib/providers/generic/templates');
+        setTemplates(templateDefs);
+
+        // 初始化每个供应商的选择（使用已有的选择或默认值）
+        const initialSelections: Record<string, any> = {};
+        enabledProviders.forEach((provider) => {
+          initialSelections[provider.id] = {
+            ttsModel: provider.selectedModels?.tts,
+            asrModel: provider.selectedModels?.asr,
+            voice: provider.selectedVoice,
+          };
+        });
+        setProviderSelections(initialSelections);
       } catch (error) {
         console.error('加载供应商失败:', error);
         // 降级到只使用用户自定义供应商
@@ -943,6 +1125,56 @@ function ProviderModal({
     }
   };
 
+  // 处理模型选择变化
+  const handleModelChange = (providerId: string, modelType: 'tts' | 'asr', modelId: string) => {
+    setProviderSelections({
+      ...providerSelections,
+      [providerId]: {
+        ...providerSelections[providerId],
+        [modelType === 'tts' ? 'ttsModel' : 'asrModel']: modelId,
+      },
+    });
+  };
+
+  // 处理音色选择变化
+  const handleVoiceChange = (providerId: string, voiceId: string) => {
+    setProviderSelections({
+      ...providerSelections,
+      [providerId]: {
+        ...providerSelections[providerId],
+        voice: voiceId,
+      },
+    });
+  };
+
+  // 获取供应商的可用模型
+  const getProviderModels = (provider: any) => {
+    if (!provider.templateType || !templates[provider.templateType]) {
+      return { ttsModels: [], asrModels: [] };
+    }
+
+    const template = templates[provider.templateType];
+    const models = template.models || [];
+
+    return {
+      ttsModels: models.filter((m: any) => m.type === 'tts'),
+      asrModels: models.filter((m: any) => m.type === 'asr'),
+    };
+  };
+
+  // 获取选中TTS模型的音色列表
+  const getVoicesForModel = (provider: any, ttsModelId?: string) => {
+    if (!ttsModelId || !provider.templateType || !templates[provider.templateType]) {
+      return [];
+    }
+
+    const template = templates[provider.templateType];
+    const models = template.models || [];
+    const ttsModel = models.find((m: any) => m.id === ttsModelId && m.type === 'tts');
+
+    return ttsModel?.voices || [];
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -952,7 +1184,16 @@ function ProviderModal({
       selectedProviders.forEach((providerId) => {
         const provider = availableProviders.find((p) => p.id === providerId);
         if (provider) {
-          providerConfigs[providerId] = provider;
+          // 合并供应商配置和用户选择的模型/音色
+          const selection = providerSelections[providerId] || {};
+          providerConfigs[providerId] = {
+            ...provider,
+            selectedModels: {
+              tts: selection.ttsModel || provider.selectedModels?.tts,
+              asr: selection.asrModel || provider.selectedModels?.asr,
+            },
+            selectedVoice: selection.voice || provider.selectedVoice,
+          };
         }
       });
 
@@ -981,8 +1222,8 @@ function ProviderModal({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-8 max-w-md w-full">
-        <h2 className="text-2xl font-bold text-gray-800 mb-6">选择供应商</h2>
+      <div className="bg-white rounded-lg p-8 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">选择供应商和模型</h2>
 
         {loading ? (
           <div className="text-center py-8">
@@ -999,27 +1240,111 @@ function ProviderModal({
           </div>
         ) : (
           <>
-            <div className="space-y-3 mb-6">
-              {availableProviders.map((provider) => (
-                <label
-                  key={provider.id}
-                  className="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedProviders.includes(provider.id)}
-                    onChange={() => handleToggle(provider.id)}
-                    className="w-5 h-5"
-                  />
-                  <div>
-                    <div className="font-medium text-gray-800">{provider.name}</div>
-                    <div className="text-sm text-gray-600">{provider.templateType}</div>
+            <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-2">
+              {availableProviders.map((provider) => {
+                const { ttsModels, asrModels } = getProviderModels(provider);
+                const selection = providerSelections[provider.id] || {};
+                const selectedTtsModel = selection.ttsModel || provider.selectedModels?.tts;
+                const selectedAsrModel = selection.asrModel || provider.selectedModels?.asr;
+                const selectedVoice = selection.voice || provider.selectedVoice;
+                const voices = getVoicesForModel(provider, selectedTtsModel);
+
+                return (
+                  <div
+                    key={provider.id}
+                    className={`border rounded-lg p-4 ${
+                      selectedProviders.includes(provider.id) ? 'border-blue-500 bg-blue-50' : 'border-gray-300'
+                    }`}
+                  >
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedProviders.includes(provider.id)}
+                        onChange={() => handleToggle(provider.id)}
+                        className="w-5 h-5 mt-1"
+                      />
+                      <div className="flex-1">
+                        <div className="font-medium text-gray-800 mb-1">{provider.name}</div>
+                        <div className="text-sm text-gray-600 mb-3">{provider.templateType}</div>
+
+                        {/* 模型选择 */}
+                        {selectedProviders.includes(provider.id) && (
+                          <div className="space-y-3 mt-3">
+                            {/* TTS模型选择 */}
+                            {ttsModels.length > 0 && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  TTS模型
+                                </label>
+                                <select
+                                  value={selectedTtsModel || ''}
+                                  onChange={(e) => handleModelChange(provider.id, 'tts', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="">请选择模型</option>
+                                  {ttsModels.map((model: any) => (
+                                    <option key={model.id} value={model.id}>
+                                      {model.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            {/* 音色选择 */}
+                            {voices.length > 0 && selectedTtsModel && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  音色
+                                </label>
+                                <select
+                                  value={selectedVoice || ''}
+                                  onChange={(e) => handleVoiceChange(provider.id, e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="">请选择音色</option>
+                                  {voices.map((voice: any) => (
+                                    <option key={voice.id} value={voice.id}>
+                                      {voice.name} {voice.description && `- ${voice.description}`}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+
+                            {/* ASR模型选择 */}
+                            {asrModels.length > 0 && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  ASR模型
+                                </label>
+                                <select
+                                  value={selectedAsrModel || ''}
+                                  onChange={(e) => handleModelChange(provider.id, 'asr', e.target.value)}
+                                  className="w-full px-3 py-2 text-sm border rounded-lg bg-white"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <option value="">请选择模型</option>
+                                  {asrModels.map((model: any) => (
+                                    <option key={model.id} value={model.id}>
+                                      {model.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </label>
                   </div>
-                </label>
-              ))}
+                );
+              })}
             </div>
 
-            <div className="flex gap-4">
+            <div className="flex gap-4 pt-4 border-t">
               <button
                 onClick={onClose}
                 className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"

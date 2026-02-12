@@ -27,8 +27,10 @@ enum TestResultStatus {
 
 /**
  * 执行批量测试
+ * @param batchId 批次ID
+ * @param batchCount 批量运行次数，默认1次
  */
-export async function executeBatchTest(batchId: string): Promise<void> {
+export async function executeBatchTest(batchId: string, batchCount: number = 1): Promise<void> {
   try {
     // 获取批次信息
     const batch = await prisma.batchTest.findUnique({
@@ -71,6 +73,8 @@ export async function executeBatchTest(batchId: string): Promise<void> {
 
       // 遍历所有供应商
       for (const providerId of providers) {
+        // 批量运行循环
+        for (let runIndex = 1; runIndex <= batchCount; runIndex++) {
         // 确保 providerId 是字符串
         const providerIdStr = String(providerId);
         let success = false;
@@ -170,16 +174,18 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             // 保存测试结果
             await prisma.batchTestResult.upsert({
               where: {
-                batchId_testCaseId_provider: {
+                batchId_testCaseId_provider_runIndex: {
                   batchId,
                   testCaseId: testCase.id,
                   provider: providerIdStr,
+                  runIndex,
                 },
               },
               create: {
                 batchId,
                 testCaseId: testCase.id,
                 provider: providerIdStr,
+                runIndex,
                 status: TestResultStatus.SUCCESS,
                 audioUrl,
                 duration: endToEndDurationSeconds,
@@ -228,16 +234,18 @@ export async function executeBatchTest(batchId: string): Promise<void> {
             if (attempt === retryCount - 1) {
               await prisma.batchTestResult.upsert({
                 where: {
-                  batchId_testCaseId_provider: {
+                  batchId_testCaseId_provider_runIndex: {
                     batchId,
                     testCaseId: testCase.id,
                     provider: providerIdStr,
+                    runIndex,
                   },
                 },
                 create: {
                   batchId,
                   testCaseId: testCase.id,
                   provider: providerIdStr,
+                  runIndex,
                   status: TestResultStatus.FAILED,
                   error: lastError,
                 },
@@ -254,10 +262,11 @@ export async function executeBatchTest(batchId: string): Promise<void> {
         if (success) {
           completedCount++;
         }
+        } // 结束批量运行循环
       }
 
       // 更新批次进度
-      const totalTests = batch.testCases.length * providers.length;
+      const totalTests = batch.testCases.length * providers.length * batchCount;
       const currentCompleted = completedCount;
       const successRate = totalTests > 0 ? (completedCount / totalTests) * 100 : 0;
       const avgDuration = completedCount > 0 ? totalDuration / completedCount : 0;

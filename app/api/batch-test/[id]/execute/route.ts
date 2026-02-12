@@ -13,6 +13,9 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const body = await request.json().catch(() => ({}));
+    const batchCount = body.batchCount || 1; // 批量运行次数，默认1次
+
     const batch = await prisma.batchTest.findUnique({
       where: { id },
       include: {
@@ -51,7 +54,8 @@ export async function POST(
       );
     }
 
-    // 更新批次状态为运行中
+    // 更新批次状态为运行中，并保存批量次数到config
+    const currentConfig = batch.config as any || {};
     await prisma.batchTest.update({
       where: { id },
       data: {
@@ -59,11 +63,15 @@ export async function POST(
         startedAt: new Date(),
         completedCases: 0,
         failedCases: 0,
+        config: {
+          ...currentConfig,
+          batchCount,
+        },
       },
     });
 
-    // 异步执行测试（不阻塞响应）
-    executeBatchTest(id).catch((error) => {
+    // 异步执行测试（不阻塞响应），传入批量次数
+    executeBatchTest(id, batchCount).catch((error) => {
       console.error('批量测试执行失败:', error);
     });
 
@@ -74,6 +82,7 @@ export async function POST(
         batchId: id,
         totalCases: batch.testCases.length,
         providers: providers,
+        batchCount: batchCount,
       },
     });
   } catch (error: any) {
@@ -108,6 +117,7 @@ export async function GET(
         startedAt: true,
         completedAt: true,
         providers: true,
+        config: true,
       },
     });
 
@@ -118,15 +128,20 @@ export async function GET(
       );
     }
 
-    // 计算实际总测试次数：用例数 × 供应商数
+    // 从config中读取批量次数
+    const batchConfig = batch.config as any || {};
+    const batchCount = batchConfig.batchCount || 1;
+
+    // 计算实际总测试次数：用例数 × 供应商数 × 批量次数
     const batchProviders = Array.isArray(batch.providers) ? batch.providers : [];
-    const actualTotal = batch.totalCases * (batchProviders.length || 1);
+    const actualTotal = batch.totalCases * (batchProviders.length || 1) * batchCount;
 
     const progress = {
       status: batch.status,
       total: actualTotal,
       completed: batch.completedCases,
       failed: batch.failedCases,
+      batchCount,
       successRate: batch.successRate ? parseFloat(batch.successRate.toString()) : null,
       avgDuration: batch.avgDuration ? parseFloat(batch.avgDuration.toString()) : null,
       totalCost: batch.totalCost ? parseFloat(batch.totalCost.toString()) : null,

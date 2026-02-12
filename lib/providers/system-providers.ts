@@ -201,7 +201,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
     const httpRequestBody = JSON.stringify({
       model: '{model}',
       text: '{text}',
-      stream: false, // 非流式输出
+      stream: true, // 启用流式输出
       voice_setting: {
         voice_id: '{voice}',
         speed: '{speed}', // 官方使用 speed，不是 speed_ratio
@@ -386,21 +386,21 @@ export function getSystemProviders(): GenericProviderConfig[] {
     const projectId = process.env.VERTEX_AI_PROJECT_ID;
     const location = process.env.VERTEX_AI_LOCATION || 'global';
 
-    // 构建 Vertex AI API URL
-    const apiUrl = geminiTemplate.defaultApiUrl
+    // ASR 配置
+    const asrApiUrl = geminiTemplate.defaultApiUrl
       .replace('{projectId}', projectId)
       .replace('{location}', location)
-      .replace('{model}', 'gemini-2.5-flash'); // 默认模型
+      .replace('{model}', 'gemini-2.5-flash'); // 默认 ASR 模型
 
     providers.push({
-      id: 'system-gemini',
-      name: 'Gemini（系统预置）',
+      id: 'system-gemini-asr',
+      name: 'Gemini ASR（系统预置）',
       type: 'generic',
-      serviceType: 'asr', // Gemini 仅支持 ASR
-      apiUrl: apiUrl,
+      serviceType: 'asr',
+      apiUrl: asrApiUrl,
       method: geminiTemplate.defaultMethod,
       authType: geminiTemplate.authType,
-      apiKey: process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON, // 存储服务账号 JSON
+      apiKey: process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON,
       requestBody: geminiTemplate.requestBodyTemplate.asr,
       responseTextPath: geminiTemplate.responseTextPath,
       responseAudioPath: geminiTemplate.responseAudioPath,
@@ -411,7 +411,41 @@ export function getSystemProviders(): GenericProviderConfig[] {
         asr: geminiTemplate.defaultModel?.asr,
         tts: undefined,
       },
-      // 存储 Vertex AI 配置
+      requestHeaders: {
+        'X-Vertex-AI-Project-ID': projectId,
+        'X-Vertex-AI-Location': location,
+      },
+      enabled: true,
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+
+    // TTS 配置
+    const ttsApiUrl = geminiTemplate.defaultApiUrl
+      .replace('{projectId}', projectId)
+      .replace('{location}', location)
+      .replace('{model}', 'gemini-2.5-flash-tts'); // 默认 TTS 模型
+
+    providers.push({
+      id: 'system-gemini-tts',
+      name: 'Gemini TTS（系统预置）',
+      type: 'generic',
+      serviceType: 'tts',
+      apiUrl: ttsApiUrl,
+      method: geminiTemplate.defaultMethod,
+      authType: geminiTemplate.authType,
+      apiKey: process.env.VERTEX_AI_SERVICE_ACCOUNT_JSON,
+      requestBody: geminiTemplate.requestBodyTemplate.tts,
+      responseTextPath: undefined,
+      responseAudioPath: geminiTemplate.responseAudioPath,
+      responseAudioFormat: geminiTemplate.responseAudioFormat,
+      errorPath: geminiTemplate.errorPath,
+      templateType: 'gemini',
+      selectedModels: {
+        asr: undefined,
+        tts: geminiTemplate.defaultModel?.tts,
+      },
+      selectedVoice: 'zh-CN-Standard-A', // 默认使用中文女声
       requestHeaders: {
         'X-Vertex-AI-Project-ID': projectId,
         'X-Vertex-AI-Location': location,
@@ -446,6 +480,68 @@ export function getSystemProviders(): GenericProviderConfig[] {
         tts: elevenlabsTemplate.defaultModel?.tts,
       },
       selectedVoice: '21m00Tcm4TlvDq8ikWAM', // 默认使用 Rachel 音色
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
+  // Speechmatics 预置配置
+  if (process.env.SPEECHMATICS_API_KEY) {
+    const speechmaticsTemplate = templates.speechmatics;
+
+    providers.push({
+      id: 'system-speechmatics',
+      name: 'Speechmatics（系统预置）',
+      type: 'generic',
+      serviceType: 'tts',
+      apiUrl: speechmaticsTemplate.defaultApiUrl,
+      method: speechmaticsTemplate.defaultMethod,
+      authType: speechmaticsTemplate.authType,
+      apiKey: process.env.SPEECHMATICS_API_KEY,
+      requestBody: speechmaticsTemplate.requestBodyTemplate.tts,
+      responseTextPath: speechmaticsTemplate.responseTextPath,
+      responseAudioPath: speechmaticsTemplate.responseAudioPath,
+      responseAudioFormat: speechmaticsTemplate.responseAudioFormat,
+      errorPath: speechmaticsTemplate.errorPath,
+      templateType: 'speechmatics',
+      selectedModels: {
+        asr: speechmaticsTemplate.defaultModel?.asr,
+        tts: speechmaticsTemplate.defaultModel?.tts,
+      },
+      selectedVoice: 'sarah', // 默认使用 Sarah 音色（British English Female）
+      enabled: true,
+      // 系统预置标识
+      isSystem: true,
+      readonly: true,
+    } as GenericProviderConfig & { isSystem: boolean; readonly: boolean });
+  }
+
+  // Rime.ai 预置配置
+  if (process.env.RIME_API_KEY) {
+    const rimeTemplate = templates.rime;
+
+    providers.push({
+      id: 'system-rime',
+      name: 'Rime.ai（系统预置）',
+      type: 'generic',
+      serviceType: 'tts',
+      apiUrl: rimeTemplate.defaultApiUrl,
+      method: rimeTemplate.defaultMethod,
+      authType: rimeTemplate.authType,
+      apiKey: process.env.RIME_API_KEY,
+      requestBody: rimeTemplate.requestBodyTemplate.tts,
+      responseTextPath: rimeTemplate.responseTextPath,
+      responseAudioPath: rimeTemplate.responseAudioPath,
+      responseAudioFormat: rimeTemplate.responseAudioFormat,
+      errorPath: rimeTemplate.errorPath,
+      templateType: 'rime',
+      selectedModels: {
+        asr: rimeTemplate.defaultModel?.asr,
+        tts: rimeTemplate.defaultModel?.tts,
+      },
+      selectedVoice: 'luna', // 默认使用 Luna 音色（Arcana 模型）
       enabled: true,
       // 系统预置标识
       isSystem: true,
