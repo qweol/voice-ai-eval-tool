@@ -1091,6 +1091,7 @@ export default function TTSPage() {
                     <option value="auto">自动识别</option>
                     <option value="zh">中文</option>
                     <option value="en">英语</option>
+                    <option value="ja">日语</option>
                     <option value="yue">粤语</option>
                     <option value="es">西班牙语</option>
                     <option value="ko">韩语</option>

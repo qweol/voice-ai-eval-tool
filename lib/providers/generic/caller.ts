@@ -9,6 +9,13 @@ import { templates } from './templates';
 import { getTemplate } from './template-loader';
 import WebSocket from 'ws';
 import { ProxyAgent } from 'undici';
+import {
+  MsgType,
+  EventType,
+  createFullClientRequest,
+  unmarshalMessage,
+} from '../doubao/websocket-protocol';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * 获取代理配置
@@ -75,14 +82,16 @@ function mapLanguageCode(language: string | undefined, templateType?: string): s
 
   // 语言代码映射表
   const languageMap: Record<string, Record<string, string>> = {
-    // 豆包使用的语言代码
+    // 豆包使用的语言代码（根据官方文档 WebSocket 单向流式v3）
     doubao: {
-      'zh': 'zh-CN',
-      'en': 'en-US',
-      'ja': 'ja-JP',
-      'ko': 'ko-KR',
-      'es': 'es-ES', // 豆包使用西班牙语（欧洲）
-      'yue': 'yue-CN', // 粤语
+      'zh': 'zh-cn',      // 中文为主，支持中英混
+      'en': 'en',         // 仅英文
+      'ja': 'ja',         // 仅日文
+      'ko': 'ko-KR',      // 韩语（保持原有映射）
+      'es': 'es-mx',      // 仅墨西哥西班牙语
+      'yue': 'yue-CN',    // 粤语（保持原有映射）
+      'id': 'id',         // 仅印尼语
+      'pt': 'pt-br',      // 仅巴西葡萄牙语
     },
     // Azure 使用的语言代码
     azure: {
@@ -1809,7 +1818,7 @@ export async function callAzureTTS(
 }
 
 /**
- * 调用豆包 TTS API（使用 V3 HTTP API）
+ * 调用豆包 TTS API（使用 V3 WebSocket API）
  */
 export async function callDoubaoTTS(
   config: GenericProviderConfig,
@@ -1825,8 +1834,8 @@ export async function callDoubaoTTS(
     // 1. 准备参数
     const voiceId = getVoiceId(config, options?.voice);
 
-    // 生成唯一的请求 ID
-    const reqid = `${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+    // 生成唯一的连接 ID
+    const connectId = uuidv4();
 
     // 转换速度：从 [0.5, 2.0] 转换为 [-50, 100]
     // 公式：speech_rate = (speed - 1) * 100
@@ -1835,197 +1844,193 @@ export async function callDoubaoTTS(
     // 限制范围在 [-50, 100]
     const clampedSpeechRate = Math.max(-50, Math.min(100, speechRate));
 
-    console.log('=== 豆包 TTS API 调用信息 ===');
+    console.log('=== 豆包 TTS WebSocket API 调用信息 ===');
     console.log('音色:', voiceId);
     console.log('速度:', speed, '→ speech_rate:', clampedSpeechRate);
     console.log('文本长度:', text.length);
-    console.log('请求ID:', reqid);
+    console.log('连接ID:', connectId);
 
-    // 2. 构建 API URL（V3 TTS 端点）
-    const apiUrl = 'https://openspeech.bytedance.com/api/v3/tts/unidirectional';
+    // 2. 构建 WebSocket URL（V3 TTS WebSocket 端点）
+    const wsUrl = 'wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream';
 
-    // 3. 构建请求体（按官方 demo 的 V3 单向流式结构）
-    // 检测语言参数
+    // 3. 构建请求体（按官方 WebSocket demo 的结构）
     const language = options?.language || 'zh';
-    const mappedLanguage = mapLanguageCode(language, 'doubao') || 'zh-CN';
+    const mappedLanguage = mapLanguageCode(language, 'doubao') || 'zh-cn';
 
     const requestBody = {
       user: {
-        uid: 'user_001',
+        uid: uuidv4(),
       },
       req_params: {
-        text,
         speaker: voiceId,
         audio_params: {
           format: 'wav',
           sample_rate: 24000,
           speech_rate: clampedSpeechRate,
-          enable_timestamp: false,
+          enable_timestamp: true,
         },
+        text,
         additions: JSON.stringify({
+          disable_markdown_filter: false,
           explicit_language: mappedLanguage,
-          disable_markdown_filter: true,
-          enable_timestamp: false,
         }),
       },
     };
 
-    console.log('API URL:', apiUrl);
+    console.log('WebSocket URL:', wsUrl);
     console.log('请求体:', JSON.stringify(requestBody, null, 2));
 
-    // 4. 构建请求头（按官方 demo）
+    // 4. 构建 WebSocket 连接头（按官方 demo）
     const resourceId = config.requestHeaders?.['X-Api-Resource-Id'] || 'seed-tts-2.0';
 
     const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'X-Api-Access-Key': config.apiKey || '', // Access Token
-      'X-Api-App-Id': config.appId || '', // App ID
-      'X-Api-Resource-Id': resourceId, // 从配置中读取，或使用默认值
-      'X-Api-Request-Id': reqid, // 使用生成的 reqid
-      'X-Api-Sequence': '-1', // -1表示单次请求
-      Connection: 'keep-alive',
+      'X-Api-App-Key': config.appId || '',
+      'X-Api-Access-Key': config.apiKey || '',
+      'X-Api-Resource-Id': resourceId,
+      'X-Api-Connect-Id': connectId,
     };
 
-    console.log('请求头:', JSON.stringify(headers, null, 2));
+    console.log('WebSocket 连接头:', JSON.stringify(headers, null, 2));
 
-    // 5. 发送请求
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody),
+    // 5. 建立 WebSocket 连接
+    const ws = await new Promise<WebSocket>((resolve, reject) => {
+      const client = new WebSocket(wsUrl, {
+        headers,
+        maxPayload: 10 * 1024 * 1024, // 10MB
+      });
+
+      client.on('open', () => {
+        console.log('✅ WebSocket 连接已建立');
+        resolve(client);
+      });
+
+      client.on('error', (error) => {
+        console.error('❌ WebSocket 连接错误:', error);
+        reject(new Error(`WebSocket 连接失败: ${error.message}`));
+      });
+
+      // 设置超时
+      setTimeout(() => {
+        if (client.readyState !== WebSocket.OPEN) {
+          client.close();
+          reject(new Error('WebSocket 连接超时'));
+        }
+      }, 10000);
     });
 
-    console.log('响应状态:', response.status, response.statusText);
-    console.log('响应 Content-Type:', response.headers.get('content-type'));
-    const ttLogId = response.headers.get('x-tt-logid') || response.headers.get('X-Tt-Logid');
-    if (ttLogId) {
-      console.log('X-Tt-Logid:', ttLogId);
-    }
+    try {
+      // 6. 发送 TTS 请求
+      const requestPayload = Buffer.from(JSON.stringify(requestBody), 'utf-8');
+      const requestMessage = createFullClientRequest(requestPayload);
 
-    // 6. 处理响应
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('豆包 TTS API 错误:', errorText);
-      throw new Error(`豆包 TTS API 调用失败: ${response.status} ${response.statusText} - ${errorText}`);
-    }
+      console.log('📤 发送 TTS 请求...');
+      ws.send(requestMessage);
 
-    // 读取响应流，并在首个chunk到达时记录TTFB
-    let ttfbRecorded = false;
-    let audioBuffer: Buffer | null = null;
-    const audioChunks: Buffer[] = [];
-    let lineBuffer = '';
-    let rawTextBuffer = '';
+      // 7. 接收响应
+      const audioChunks: Buffer[] = [];
+      let ttfbRecorded = false;
 
-    if (response.body && typeof response.body.getReader === 'function') {
-      const reader = response.body.getReader();
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        if (value) {
-          if (!ttfbRecorded) {
-            ttfb = Date.now() - startTime;
-            ttfbRecorded = true;
-            console.log('TTFB (首字节耗时):', ttfb, 'ms');
+      await new Promise<void>((resolve, reject) => {
+        ws.on('message', (data: Buffer) => {
+          try {
+            const msg = unmarshalMessage(data);
+
+            // 记录 TTFB
+            if (!ttfbRecorded) {
+              ttfb = Date.now() - startTime;
+              ttfbRecorded = true;
+              console.log('TTFB (首字节耗时):', ttfb, 'ms');
+            }
+
+            // 处理不同类型的消息
+            if (msg.type === MsgType.FullServerResponse) {
+              // 服务器响应消息
+              if (msg.event === EventType.SessionFinished) {
+                console.log('✅ 会话完成');
+                resolve();
+              } else if (msg.event === EventType.SessionFailed) {
+                const errorMsg = msg.payload.toString('utf-8');
+                console.error('❌ 会话失败:', errorMsg);
+                reject(new Error(`豆包 TTS 会话失败: ${errorMsg}`));
+              } else {
+                // 其他事件，记录日志
+                console.log(`📨 收到事件: ${EventType[msg.event]}`);
+              }
+            } else if (msg.type === MsgType.AudioOnlyServer) {
+              // 音频数据
+              if (msg.payload && msg.payload.length > 0) {
+                audioChunks.push(msg.payload);
+                console.log(`📦 收到音频块: ${msg.payload.length} bytes`);
+              }
+            } else if (msg.type === MsgType.Error) {
+              const errorMsg = msg.payload.toString('utf-8');
+              console.error('❌ 收到错误消息:', errorMsg);
+              reject(new Error(`豆包 TTS 错误: ${errorMsg}`));
+            }
+          } catch (error: any) {
+            console.error('❌ 解析消息失败:', error);
+            reject(new Error(`解析 WebSocket 消息失败: ${error.message}`));
           }
-          const chunkText = Buffer.from(value).toString('utf-8');
-          lineBuffer += chunkText;
-          rawTextBuffer += chunkText;
-          const lines = lineBuffer.split(/\r?\n/);
-          lineBuffer = lines.pop() || '';
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            const data = JSON.parse(line);
-            if (data.code === 0 && data.data) {
-              audioChunks.push(Buffer.from(data.data, 'base64'));
-              continue;
-            }
-            if (data.code === 20000000) {
-              break;
-            }
-            if (data.code && data.code !== 0) {
-              const errMsg = data.message || 'unknown error';
-              const logIdInfo = ttLogId ? `, X-Tt-Logid=${ttLogId}` : '';
-              throw new Error(`豆包 TTS 返回错误: code=${data.code}, message=${errMsg}${logIdInfo}`);
-            }
+        });
+
+        ws.on('error', (error) => {
+          console.error('❌ WebSocket 错误:', error);
+          reject(new Error(`WebSocket 错误: ${error.message}`));
+        });
+
+        ws.on('close', (code, reason) => {
+          console.log(`🔌 WebSocket 连接关闭: code=${code}, reason=${reason}`);
+          if (audioChunks.length === 0) {
+            reject(new Error('WebSocket 连接关闭，但未收到音频数据'));
+          } else {
+            resolve();
           }
-        }
-      }
-    } else {
-      const arrayBuffer = await response.arrayBuffer();
-      lineBuffer = Buffer.from(arrayBuffer).toString('utf-8');
-      rawTextBuffer = lineBuffer;
-      const lines = lineBuffer.split(/\r?\n/);
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const data = JSON.parse(line);
-        if (data.code === 0 && data.data) {
-          audioChunks.push(Buffer.from(data.data, 'base64'));
-          continue;
-        }
-        if (data.code === 20000000) {
-          break;
-        }
-        if (data.code && data.code !== 0) {
-          const errMsg = data.message || 'unknown error';
-          const logIdInfo = ttLogId ? `, X-Tt-Logid=${ttLogId}` : '';
-          throw new Error(`豆包 TTS 返回错误: code=${data.code}, message=${errMsg}${logIdInfo}`);
-        }
-      }
-    }
+        });
 
-    if (!ttfbRecorded) {
-      ttfb = Date.now() - startTime;
-    }
+        // 设置超时
+        setTimeout(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.close();
+            reject(new Error('WebSocket 接收超时'));
+          }
+        }, 30000); // 30秒超时
+      });
 
-    if (audioChunks.length === 0) {
-      const sample = rawTextBuffer.substring(0, 2000);
-      console.log('原始响应（前2000字符）:', sample);
-      // 兜底：尝试将整个响应当作单个 JSON 解析
-      try {
-        const fallback = JSON.parse(rawTextBuffer);
-        if (fallback?.code && fallback.code !== 0) {
-          const errMsg = fallback.message || 'unknown error';
-          const logIdInfo = ttLogId ? `, X-Tt-Logid=${ttLogId}` : '';
-          throw new Error(`豆包 TTS 返回错误: code=${fallback.code}, message=${errMsg}${logIdInfo}`);
-        }
-        if (fallback?.data) {
-          audioBuffer = Buffer.from(fallback.data, 'base64');
-        }
-      } catch (e) {
-        // 保持后续统一错误提示
+      // 8. 合并音频数据
+      if (audioChunks.length === 0) {
+        throw new Error('未收到音频数据');
+      }
+
+      const audioBuffer = Buffer.concat(audioChunks);
+      console.log('✅ 音频接收完成，总大小:', audioBuffer.length, 'bytes');
+
+      const totalTime = Date.now() - startTime;
+      const duration = totalTime / 1000;
+
+      console.log('🎉 豆包 TTS WebSocket 调用成功');
+      console.log('音频大小:', audioBuffer.length, 'bytes');
+      console.log('总耗时:', totalTime, 'ms');
+      console.log('TTFB:', ttfb, 'ms');
+
+      return {
+        audioBuffer,
+        duration,
+        ttfb,
+        totalTime,
+        format: 'wav',
+        modelId,
+        characterCount,
+      };
+    } finally {
+      // 关闭 WebSocket 连接
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+        console.log('🔌 WebSocket 连接已关闭');
       }
     }
-
-    if (!audioBuffer && audioChunks.length > 0) {
-      audioBuffer = Buffer.concat(audioChunks);
-    }
-
-    if (!audioBuffer) {
-      throw new Error('无法从响应中提取音频数据，请检查 API 响应格式');
-    }
-
-    console.log('Base64 解码成功，音频大小:', audioBuffer.length, 'bytes');
-
-    const totalTime = Date.now() - startTime;
-    const duration = totalTime / 1000;
-
-    console.log('🎉 豆包 TTS 调用成功');
-    console.log('音频大小:', audioBuffer.length, 'bytes');
-    console.log('总耗时:', totalTime, 'ms');
-    console.log('TTFB:', ttfb, 'ms');
-
-    return {
-      audioBuffer,
-      duration,
-      ttfb,
-      totalTime,
-      format: 'wav',
-      modelId,
-      characterCount,
-    };
   } catch (error: any) {
-    console.error('❌ 豆包 TTS 调用失败:', error.message);
-    throw new Error(`豆包 TTS API调用失败: ${error.message}`);
+    console.error('❌ 豆包 TTS WebSocket 调用失败:', error.message);
+    throw new Error(`豆包 TTS WebSocket API调用失败: ${error.message}`);
   }
 }
 

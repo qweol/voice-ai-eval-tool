@@ -173,7 +173,7 @@ export function getSystemProviders(): GenericProviderConfig[] {
         asr: undefined,
         tts: 'doubao-tts-2.0',
       },
-      selectedVoice: 'BV700_V2_streaming', // 默认使用灿灿2.0音色
+      selectedVoice: 'zh_female_vv_uranus_bigtts', // 默认使用vivi2.0音色
       // 存储 TTS Resource ID，供 caller.ts 使用
       requestHeaders: {
         'X-Api-Resource-Id': ttsResourceId,
