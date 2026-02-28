@@ -19,8 +19,15 @@ model BatchTest {
   tags        Json
   status      BatchTestStatus @default(DRAFT)
 
+  // 测试类型：TTS 或 ASR
+  testType    TestType @default(TTS) @map("test_type")
+
   config      Json     @default("{}")
   providers   Json
+
+  // ASR 特有字段
+  audioSource String?  @db.VarChar(255) @map("audio_source") // 音频来源（文件名或样本ID）
+  language    String?  @db.VarChar(20)  // 识别语言
 
   totalCases     Int      @default(0) @map("total_cases")
   completedCases Int      @default(0) @map("completed_cases")
@@ -42,6 +49,7 @@ model BatchTest {
 
   @@index([status])
   @@index([category])
+  @@index([testType])
   @@index([createdAt(sort: Desc)])
   @@map("batch_tests")
 }
@@ -52,6 +60,11 @@ enum BatchTestStatus {
   COMPLETED
   FAILED
   PAUSED
+}
+
+enum TestType {
+  TTS  // 语音合成测试
+  ASR  // 语音识别测试
 }
 
 // 测试用例表
@@ -99,9 +112,19 @@ model BatchTestResult {
   ttfb         Int?
   totalTime    Int?     @map("total_time")
 
+  // 批量运行索引（第几次运行，从1开始）
+  runIndex     Int      @default(1) @map("run_index")
+
+  // ASR 特有字段
+  recognizedText String?  @db.Text @map("recognized_text")  // 识别出的文本
+  referenceText  String?  @db.Text @map("reference_text")   // 参考文本
+  similarity     Decimal? @db.Decimal(5, 2)                 // 与参考文本的相似度
+  avgSimilarity  Decimal? @db.Decimal(5, 2) @map("avg_similarity") // 与其他供应商结果的平均相似度
+  confidence     Decimal? @db.Decimal(5, 2)                 // 识别置信度
+
   createdAt    DateTime @default(now()) @map("created_at")
 
-  @@unique([batchId, testCaseId, provider])
+  @@unique([batchId, testCaseId, provider, runIndex])
   @@index([batchId])
   @@index([testCaseId])
   @@index([provider])
